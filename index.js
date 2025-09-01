@@ -1208,10 +1208,12 @@ const swaggerDocument = {
   },
   servers: [
     {
-      url: process.env.NODE_ENV === 'production' 
-        ? `https://${process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'your-app.railway.app'}`
-        : `http://localhost:${PORT}`,
-      description: process.env.NODE_ENV === 'production' ? 'Servidor de producción (Railway)' : 'Servidor de desarrollo'
+      url: 'https://agendavaleriagopar-production.up.railway.app',
+      description: 'Servidor de producción (Railway)'
+    },
+    {
+      url: `http://localhost:${PORT}`,
+      description: 'Servidor de desarrollo local'
     }
   ],
   paths: {
