@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const moment = require('moment-timezone');
+
+// Configurar moment en español
+moment.locale('es');
 const swaggerUi = require('swagger-ui-express');
 
 // Importar configuración y servicios
@@ -8,12 +11,20 @@ const config = require('./config');
 const { initializeAuth, getCalendarInstance } = require('./services/googleAuth');
 const { getSheetData, findData, findWorkingHours, updateClientStatus, getClientDataByReservationCode, saveClientDataOriginal, ensureClientsSheet } = require('./services/googleSheets');
 const { findAvailableSlots, cancelEventByReservationCodeOriginal, createEventOriginal, formatTimeTo12Hour } = require('./services/googleCalendar');
+const { sendAppointmentConfirmation, emailServiceReady } = require('./services/emailService');
 
 const app = express();
 const PORT = config.server.port;
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-app.railway.app', /railway\.app$/] 
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -144,6 +155,45 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
 // =================================================================
 // 🌐 ENDPOINTS DE LA API
 // =================================================================
+
+/**
+ * ENDPOINT: Health Check para Railway
+ */
+app.get('/health', (req, res) => {
+  const healthData = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    port: PORT,
+    services: {
+      googleAuth: config.google.clientEmail ? 'configured' : 'missing',
+      googleSheets: config.business.sheetId ? 'configured' : 'missing'
+    },
+    version: '1.0.0'
+  };
+  
+  res.status(200).json(healthData);
+});
+
+/**
+ * ENDPOINT: Root - Información de la API
+ */
+app.get('/', (req, res) => {
+  const serverUrl = getServerUrl();
+  res.json({
+    message: '🚀 ValGop API - Sistema de Gestión de Citas',
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    documentation: `${serverUrl}/api-docs`,
+    endpoints: {
+      consulta_disponibilidad: `GET ${serverUrl}/api/consulta-disponibilidad`,
+      agenda_cita: `POST ${serverUrl}/api/agenda-cita`,
+      cancela_cita: `POST ${serverUrl}/api/cancela-cita`,
+      consulta_fecha: `GET ${serverUrl}/api/consulta-fecha-actual`
+    },
+    status: 'operational'
+  });
+});
 
 /**
  * ENDPOINT 1: ConsultaDisponibilidad (GET)
@@ -592,7 +642,22 @@ app.get('/api/eventos/:fecha', async (req, res) => {
       resultado += `- No hay eventos creados en esta fecha\n`;
     }
     
-    return res.json({ respuesta: resultado });
+    // Formatear respuesta con datos estructurados también
+    const eventosFormateados = events.map(event => ({
+      id: event.id,
+      summary: event.summary,
+      start: event.start?.dateTime || event.start?.date,
+      end: event.end?.dateTime || event.end?.date,
+      creator: event.creator?.email
+    }));
+    
+    return res.json({ 
+      respuesta: resultado,
+      eventos: eventosFormateados,
+      total: events.length,
+      fecha: fecha,
+      calendarId: calendarId
+    });
     
   } catch (error) {
     console.error('Error consultando eventos:', error.message);
@@ -714,23 +779,26 @@ app.post('/api/agenda-cita', async (req, res) => {
 
     console.log('✅ VALIDACIÓN EXITOSA - Todos los campos críticos presentes');
 
-    // PASO 2: VALIDACIÓN DE TIEMPO (lógica original)
-    const now = new Date();
-    const startTime = new Date(`${date}T${time}:00`);
-    const minimumBookingTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hora mínima
+    // PASO 2: VALIDACIÓN DE TIEMPO (lógica original con zona horaria corregida)
+    const now = moment().tz(config.timezone.default);
+    const startTime = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', config.timezone.default);
+    const minimumBookingTime = moment(now).add(1, 'hour');
 
-    console.log('=== VALIDACIÓN DE TIEMPO ===');
-    console.log('now:', now.toISOString());
-    console.log('startTime:', startTime.toISOString());
-    console.log('minimumBookingTime:', minimumBookingTime.toISOString());
+    console.log('=== VALIDACIÓN DE TIEMPO (ZONA HORARIA MÉXICO) ===');
+    console.log('now:', now.format('YYYY-MM-DD HH:mm:ss z'));
+    console.log('startTime:', startTime.format('YYYY-MM-DD HH:mm:ss z'));
+    console.log('minimumBookingTime:', minimumBookingTime.format('YYYY-MM-DD HH:mm:ss z'));
 
-    if (isNaN(startTime.getTime())) {
+    if (!startTime.isValid()) {
       console.log('❌ ERROR: Formato de fecha/hora inválido');
       return res.json({ respuesta: '⚠️ Error: El formato de fecha o hora es inválido.' });
     }
 
-    const isToday = startTime.toDateString() === now.toDateString();
-    if (isToday && startTime < minimumBookingTime) {
+    const isToday = startTime.isSame(now, 'day');
+    console.log('isToday:', isToday);
+    console.log('startTime < minimumBookingTime:', startTime.isBefore(minimumBookingTime));
+    
+    if (isToday && startTime.isBefore(minimumBookingTime)) {
       const time12h = formatTimeTo12Hour(time);
       console.log('❌ ERROR: Cita demasiado pronto (menos de 1 hora)');
       return res.json({ 
@@ -781,8 +849,13 @@ app.post('/api/agenda-cita', async (req, res) => {
       return res.json({ respuesta: '🚫 Error: El servicio solicitado no fue encontrado.' });
     }
 
-    // PASO 4: CREAR EVENTO (lógica original)
-    const endTime = new Date(startTime.getTime() + parseInt(serviceDuration) * 60000);
+    // PASO 4: CREAR EVENTO (lógica original con zona horaria corregida)
+    const endTime = moment(startTime).add(parseInt(serviceDuration), 'minutes');
+    
+    console.log('=== DATOS DEL EVENTO ===');
+    console.log('startTime final:', startTime.format('YYYY-MM-DD HH:mm:ss z'));
+    console.log('endTime final:', endTime.format('YYYY-MM-DD HH:mm:ss z'));
+    console.log('serviceDuration:', serviceDuration, 'minutos');
     
     const eventTitle = `Cita: ${clientName} (${profesionalName || 'Especialista'})`;
     const eventDescription = `Cliente: ${clientName}
@@ -795,8 +868,8 @@ Agendado por: Agente de WhatsApp`;
     const eventData = {
       title: eventTitle,
       description: eventDescription,
-      startTime: startTime,
-      endTime: endTime
+      startTime: startTime.toDate(), // Convertir moment a Date
+      endTime: endTime.toDate()       // Convertir moment a Date
     };
 
     console.log('=== CREACIÓN DE EVENTO ===');
@@ -839,7 +912,34 @@ Agendado por: Agente de WhatsApp`;
       console.log('💥 FALLO: No se pudieron guardar los datos del cliente');
     }
 
-    // PASO 6: RESPUESTA FINAL (lógica original)
+    // PASO 6: ENVÍO DE EMAIL DE CONFIRMACIÓN
+    console.log('📧 === ENVÍO DE EMAIL DE CONFIRMACIÓN ===');
+    try {
+      if (emailServiceReady && clientEmail && clientEmail !== 'Sin Email') {
+        const emailData = {
+          clientName,
+          clientEmail,
+          date,
+          time,
+          serviceName,
+          profesionalName: profesionalName || 'Especialista',
+          codigoReserva
+        };
+        
+        const emailResult = await sendAppointmentConfirmation(emailData);
+        if (emailResult.success) {
+          console.log('✅ Email de confirmación enviado exitosamente');
+        } else {
+          console.log('⚠️ Email no enviado:', emailResult.reason || emailResult.error);
+        }
+      } else {
+        console.log('⚠️ Email saltado - SMTP no configurado o email inválido');
+      }
+    } catch (emailError) {
+      console.error('❌ Error enviando email (no crítico):', emailError.message);
+    }
+
+    // PASO 7: RESPUESTA FINAL (lógica original)
     const time12h = formatTimeTo12Hour(time);
     console.log('=== RESPUESTA FINAL ===');
     console.log('time12h:', time12h);
@@ -1108,8 +1208,10 @@ const swaggerDocument = {
   },
   servers: [
     {
-      url: `http://localhost:${PORT}`,
-      description: 'Servidor de desarrollo'
+      url: process.env.NODE_ENV === 'production' 
+        ? `https://${process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'your-app.railway.app'}`
+        : `http://localhost:${PORT}`,
+      description: process.env.NODE_ENV === 'production' ? 'Servidor de producción (Railway)' : 'Servidor de desarrollo'
     }
   ],
   paths: {
@@ -1521,19 +1623,48 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 // 🚀 INICIO DEL SERVIDOR
 // =================================================================
 
+// =================================================================
+// 🔧 UTILIDADES PARA RAILWAY
+// =================================================================
+
+// Detectar URL de Railway automáticamente
+const getServerUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    if (process.env.RAILWAY_STATIC_URL) {
+      return `https://${process.env.RAILWAY_STATIC_URL}`;
+    } else if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+      return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+    } else {
+      return 'https://your-app.railway.app';
+    }
+  }
+  return `http://localhost:${PORT}`;
+};
+
 app.listen(PORT, () => {
+  const serverUrl = getServerUrl();
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   console.log(`🚀 ValGop API ejecutándose en puerto ${PORT}`);
-  console.log(`📚 Documentación disponible en: http://localhost:${PORT}/api-docs`);
+  console.log(`🌍 Entorno: ${isProduction ? 'PRODUCCIÓN (Railway)' : 'DESARROLLO'}`);
+  console.log(`📚 Documentación disponible en: ${serverUrl}/api-docs`);
   console.log(`🌐 Endpoints disponibles:`);
-  console.log(`   GET  /api/consulta-disponibilidad`);
-  console.log(`   POST /api/agenda-cita`);
-  console.log(`   POST /api/cancela-cita`);
-  console.log(`   GET  /api/consulta-fecha-actual`);
-  console.log(`   GET  /api/eventos/:fecha`);
-  console.log(`   POST /api/debug-agenda`);
-  console.log(`   POST /api/debug-sheets`);
+  console.log(`   GET  ${serverUrl}/api/consulta-disponibilidad`);
+  console.log(`   POST ${serverUrl}/api/agenda-cita`);
+  console.log(`   POST ${serverUrl}/api/cancela-cita`);
+  console.log(`   GET  ${serverUrl}/api/consulta-fecha-actual`);
+  console.log(`   GET  ${serverUrl}/api/eventos/:fecha`);
+  console.log(`   POST ${serverUrl}/api/debug-agenda`);
+  console.log(`   POST ${serverUrl}/api/debug-sheets`);
   console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
   console.log(`   - Google Sheet ID: ${config.business.sheetId}`);
   console.log(`   - Google Auth: ${config.google.clientEmail ? '✅ Configurado' : '❌ Pendiente'}`);
+  
+  if (isProduction) {
+    console.log(`\n⚠️  IMPORTANTE: Si ves "Failed to fetch" en Swagger:`);
+    console.log(`   1. Verifica que NODE_ENV=production esté configurado en Railway`);
+    console.log(`   2. Configura las variables de entorno de Google APIs`);
+    console.log(`   3. Revisa los logs de Railway para más detalles`);
+  }
 }); 

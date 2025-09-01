@@ -526,16 +526,28 @@ async function createEventOriginal(calendarId, eventData) {
       };
     }
 
-    // PASO 2: Crear evento (lógica original)
+    // PASO 2: Crear evento (lógica original con zona horaria corregida)
+    console.log('🕒 === ZONA HORARIA DEBUG ===');
+    console.log('eventData.startTime:', eventData.startTime);
+    console.log('eventData.endTime:', eventData.endTime);
+    console.log('timezone configurado:', config.timezone.default);
+    
+    // Asegurar que las fechas estén en la zona horaria correcta
+    const startTimeFormatted = moment(eventData.startTime).tz(config.timezone.default).format();
+    const endTimeFormatted = moment(eventData.endTime).tz(config.timezone.default).format();
+    
+    console.log('startTimeFormatted:', startTimeFormatted);
+    console.log('endTimeFormatted:', endTimeFormatted);
+
     const event = {
       summary: eventData.title,
       description: eventData.description,
       start: {
-        dateTime: eventData.startTime.toISOString(),
+        dateTime: startTimeFormatted,
         timeZone: config.timezone.default
       },
       end: {
-        dateTime: eventData.endTime.toISOString(),
+        dateTime: endTimeFormatted,
         timeZone: config.timezone.default
       }
     };

@@ -66,6 +66,14 @@ const config = {
   },
 
   // Configuraciones de validación
+  // Configuración de SMTP para emails
+  smtp: {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || ''
+  },
+
   validation: {
     minBookingHours: 1, // Mínimo 1 hora de anticipación
     maxDaysAhead: 90,   // Máximo 90 días en el futuro

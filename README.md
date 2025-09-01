@@ -31,9 +31,31 @@ npm install
 ```
 
 3. Configurar variables de entorno:
-```bash
-cp .env.example .env
-# Editar .env con tus credenciales
+
+**Variables obligatorias (Google APIs):**
+```env
+GOOGLE_CLIENT_EMAIL=tu-cuenta@proyecto.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nTU_CLAVE...\n-----END PRIVATE KEY-----
+GOOGLE_PROJECT_ID=tu-proyecto-id
+GOOGLE_SHEET_ID=1zQpN_1MAQVx6DrYwbL8zK49Wv5xu4eDlGqTjKl9d-JU
+```
+
+**Variables opcionales (Email automático):**
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tu-email@gmail.com
+SMTP_PASS=tu-app-password-de-16-caracteres
+```
+
+**Variables opcionales (Personalización):**
+```env
+NODE_ENV=development
+PORT=3000
+TIMEZONE=America/Mexico_City
+BUSINESS_NAME=Clinica ValGop
+BUSINESS_EMAIL=goparirisvaleria@gmail.com
+BUSINESS_PHONE=+52 5555555555
 ```
 
 4. Iniciar el servidor:
@@ -117,6 +139,11 @@ Content-Type: application/json
   "id_cita": "ABC123"
 }
 ```
+
+**Funcionalidades adicionales:**
+- ✅ **Email automático**: Se envía confirmación por email al cliente
+- ✅ **Zona horaria correcta**: Manejo correcto de timezone México (America/Mexico_City)
+- ✅ **Validaciones mejoradas**: Permite agendar el mismo día con 1+ hora de anticipación
 
 **Respuesta de error (validación):**
 ```json
