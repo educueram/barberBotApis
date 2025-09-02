@@ -214,60 +214,91 @@ async function sendNewAppointmentNotification(appointmentData) {
     const fechaFormateada = moment.tz(date, config.timezone.default).format('dddd, D [de] MMMM [de] YYYY');
     const horaFormateada = formatTimeTo12Hour(time);
 
-    // Email de notificación para el negocio (similar al de la imagen)
+    // Email de notificación para el negocio (formato exacto como la imagen)
     const notificationContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <div style="background: white; width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+      
+      <!-- Header azul -->
+      <div style="background: linear-gradient(135deg, #2196f3, #1976d2); color: white; padding: 25px; text-align: center; border-radius: 12px 12px 0 0;">
+        <div style="background: white; width: 50px; height: 50px; border-radius: 8px; margin: 0 auto 15px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px;">
           📅
         </div>
-        <h1 style="margin: 0; font-size: 28px;">Nueva Cita Agendada</h1>
-        <p style="margin: 10px 0 0; font-size: 16px;">Sistema de Agendamiento WhatsApp</p>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 600;">Nueva Cita Agendada</h1>
+        <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;">Sistema de Agendamiento WhatsApp</p>
       </div>
 
-      <div style="background-color: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+      <!-- Contenido principal -->
+      <div style="background-color: white; padding: 25px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
         
-        <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #1976d2; margin-top: 0; font-size: 20px;">Nueva Reserva Confirmada 🎉</h2>
+        <!-- Nueva Reserva Confirmada -->
+        <div style="background-color: #e3f2fd; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid #2196f3;">
+          <h2 style="color: #1565c0; margin: 0; font-size: 18px; font-weight: 600;">Nueva Reserva Confirmada 🎉</h2>
         </div>
 
+        <!-- Información del Cliente -->
         <div style="margin-bottom: 25px;">
-          <h3 style="color: #1976d2; margin-bottom: 15px; display: flex; align-items: center;">
+          <h3 style="color: #1565c0; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;">
             👤 Información del Cliente
           </h3>
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr style="border-bottom: 1px solid #eee;">
-              <td style="padding: 8px 0; font-weight: bold; color: #666;">📝 Nombre:</td>
-              <td style="padding: 8px 0;">${clientName}</td>
-            </tr>
-            <tr style="border-bottom: 1px solid #eee;">
-              <td style="padding: 8px 0; font-weight: bold; color: #666;">📧 Email:</td>
-              <td style="padding: 8px 0;"><a href="mailto:${clientEmail}" style="color: #1976d2;">${clientEmail}</a></td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; font-weight: bold; color: #666;">📱 Teléfono:</td>
-              <td style="padding: 8px 0;"><a href="tel:${clientPhone}" style="color: #1976d2;">${clientPhone}</a></td>
-            </tr>
-          </table>
+          <div style="background-color: #fafafa; padding: 15px; border-radius: 8px;">
+            <div style="margin-bottom: 8px;">
+              <span style="color: #666; font-weight: 500;">📝 Nombre:</span>
+              <span style="margin-left: 8px; font-weight: 600;">${clientName}</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <span style="color: #666; font-weight: 500;">📧 Email:</span>
+              <a href="mailto:${clientEmail}" style="margin-left: 8px; color: #1976d2; text-decoration: none;">${clientEmail}</a>
+            </div>
+            <div>
+              <span style="color: #666; font-weight: 500;">📱 Teléfono:</span>
+              <span style="margin-left: 8px; font-weight: 600;">${clientPhone}</span>
+            </div>
+          </div>
         </div>
 
-        <div style="background-color: #f3e5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h3 style="color: #7b1fa2; margin-top: 0; display: flex; align-items: center;">
+        <!-- Detalles de la Cita -->
+        <div style="margin-bottom: 25px;">
+          <h3 style="color: #1565c0; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;">
             📅 Detalles de la Cita
           </h3>
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr style="border-bottom: 1px solid #e1bee7;">
-              <td style="padding: 8px 0; font-weight: bold; color: #7b1fa2;">📅 Fecha:</td>
-              <td style="padding: 8px 0; font-size: 18px; font-weight: bold;">${fechaFormateada}</td>
-            </tr>
-          </table>
+          <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px;">
+            <div style="margin-bottom: 8px;">
+              <span style="color: #2e7d32; font-weight: 500;">📅 Fecha:</span>
+              <span style="margin-left: 8px; font-weight: 600;">${fechaFormateada}</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <span style="color: #2e7d32; font-weight: 500;">⏰ Hora:</span>
+              <span style="margin-left: 8px; font-weight: 600;">${horaFormateada}</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <span style="color: #2e7d32; font-weight: 500;">👨‍⚕️ Especialista:</span>
+              <span style="margin-left: 8px; font-weight: 600;">${profesionalName}</span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <span style="color: #2e7d32; font-weight: 500;">⚖️ Servicio:</span>
+              <span style="margin-left: 8px; font-weight: 600;">${serviceName}</span>
+            </div>
+            <div>
+              <span style="color: #2e7d32; font-weight: 500;">🎟️ Código:</span>
+              <span style="margin-left: 8px; background: #2196f3; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">${codigoReserva}</span>
+            </div>
+          </div>
         </div>
 
-        <div style="text-align: center; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
-          <p style="margin: 0; color: #666; font-size: 14px;">
-            Cita agendada automáticamente vía WhatsApp<br>
-            Código de reserva: <strong>${codigoReserva}</strong>
+        <!-- Recordatorio -->
+        <div style="background-color: #fff3e0; border: 1px solid #ffcc02; border-radius: 8px; padding: 15px; margin-bottom: 20px; border-left: 4px solid #ffcc02;">
+          <div style="display: flex; align-items: center;">
+            <span style="margin-right: 8px; font-size: 16px;">⚠️</span>
+            <strong style="color: #f57f17; font-size: 14px;">Recordatorio</strong>
+          </div>
+          <p style="margin: 8px 0 0; color: #e65100; font-size: 14px; line-height: 1.4;">
+            El cliente recibirá recordatorios automáticos 24h y 2h antes de la cita.
           </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; padding: 15px 0; color: #999; font-size: 12px;">
+          Agendado automáticamente vía WhatsApp • ${moment().tz(config.timezone.default).format('D/M/YYYY, H:mm:ss')} p. m.
         </div>
 
       </div>
