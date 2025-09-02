@@ -11,7 +11,7 @@ const config = require('./config');
 const { initializeAuth, getCalendarInstance } = require('./services/googleAuth');
 const { getSheetData, findData, findWorkingHours, updateClientStatus, getClientDataByReservationCode, saveClientDataOriginal, ensureClientsSheet } = require('./services/googleSheets');
 const { findAvailableSlots, cancelEventByReservationCodeOriginal, createEventOriginal, formatTimeTo12Hour } = require('./services/googleCalendar');
-const { sendAppointmentConfirmation, emailServiceReady } = require('./services/emailService');
+const { sendAppointmentConfirmation, sendNewAppointmentNotification, emailServiceReady } = require('./services/emailService');
 
 const app = express();
 const PORT = config.server.port;
@@ -912,13 +912,14 @@ Agendado por: Agente de WhatsApp`;
       console.log('💥 FALLO: No se pudieron guardar los datos del cliente');
     }
 
-    // PASO 6: ENVÍO DE EMAIL DE CONFIRMACIÓN
-    console.log('📧 === ENVÍO DE EMAIL DE CONFIRMACIÓN ===');
+    // PASO 6: ENVÍO DE EMAILS (CONFIRMACIÓN AL CLIENTE + NOTIFICACIÓN AL NEGOCIO)
+    console.log('📧 === ENVÍO DE EMAILS ===');
     try {
-      if (emailServiceReady && clientEmail && clientEmail !== 'Sin Email') {
+      if (emailServiceReady) {
         const emailData = {
           clientName,
           clientEmail,
+          clientPhone,
           date,
           time,
           serviceName,
@@ -926,17 +927,33 @@ Agendado por: Agente de WhatsApp`;
           codigoReserva
         };
         
-        const emailResult = await sendAppointmentConfirmation(emailData);
-        if (emailResult.success) {
-          console.log('✅ Email de confirmación enviado exitosamente');
+        // 1. Email de confirmación al cliente
+        if (clientEmail && clientEmail !== 'Sin Email') {
+          console.log('📧 Enviando confirmación al cliente...');
+          const clientEmailResult = await sendAppointmentConfirmation(emailData);
+          if (clientEmailResult.success) {
+            console.log('✅ Email de confirmación enviado al cliente exitosamente');
+          } else {
+            console.log('⚠️ Email de confirmación no enviado:', clientEmailResult.reason || clientEmailResult.error);
+          }
         } else {
-          console.log('⚠️ Email no enviado:', emailResult.reason || emailResult.error);
+          console.log('⚠️ Email de confirmación saltado - email del cliente inválido');
         }
+        
+        // 2. Email de notificación al negocio (NUEVO)
+        console.log('📧 Enviando notificación al negocio...');
+        const businessEmailResult = await sendNewAppointmentNotification(emailData);
+        if (businessEmailResult.success) {
+          console.log('✅ Notificación enviada al negocio exitosamente');
+        } else {
+          console.log('⚠️ Notificación al negocio no enviada:', businessEmailResult.reason || businessEmailResult.error);
+        }
+        
       } else {
-        console.log('⚠️ Email saltado - SMTP no configurado o email inválido');
+        console.log('⚠️ Emails saltados - SMTP no configurado');
       }
     } catch (emailError) {
-      console.error('❌ Error enviando email (no crítico):', emailError.message);
+      console.error('❌ Error enviando emails (no crítico):', emailError.message);
     }
 
     // PASO 7: RESPUESTA FINAL (lógica original)
@@ -1070,6 +1087,55 @@ app.post('/api/debug-agenda', async (req, res) => {
     debug.push(`💥 ERROR CRÍTICO: ${error.message}`);
     debug.push(`📚 Stack: ${error.stack}`);
     return res.json({ debug: debug.join('\n') });
+  }
+});
+
+/**
+ * ENDPOINT: Test Email - Probar envío de email
+ */
+app.post('/api/test-email', async (req, res) => {
+  try {
+    console.log('📧 === TEST DE EMAIL ===');
+    
+    const { email } = req.body;
+    const testEmail = email || 'goparirisvaleria@gmail.com';
+    
+    console.log('Enviando email de prueba a:', testEmail);
+    
+    const testData = {
+      clientName: 'Usuario Test',
+      clientEmail: testEmail,
+      date: '2025-09-01',
+      time: '15:00',
+      serviceName: 'Test de Email',
+      profesionalName: 'Lic. Iris Valeria Gopar',
+      codigoReserva: 'TEST123'
+    };
+    
+    const result = await sendAppointmentConfirmation(testData);
+    
+    if (result.success) {
+      return res.json({
+        success: true,
+        message: '✅ Email enviado exitosamente',
+        details: result
+      });
+    } else {
+      return res.json({
+        success: false,
+        message: '❌ Error enviando email',
+        error: result.error || result.reason,
+        details: result
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error en test de email:', error);
+    return res.json({
+      success: false,
+      message: '💥 Error interno',
+      error: error.message
+    });
   }
 });
 
@@ -1658,6 +1724,7 @@ app.listen(PORT, () => {
   console.log(`   GET  ${serverUrl}/api/eventos/:fecha`);
   console.log(`   POST ${serverUrl}/api/debug-agenda`);
   console.log(`   POST ${serverUrl}/api/debug-sheets`);
+  console.log(`   POST ${serverUrl}/api/test-email`);
   console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
   console.log(`   - Google Sheet ID: ${config.business.sheetId}`);

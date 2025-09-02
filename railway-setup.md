@@ -95,6 +95,14 @@ Después del deploy, verifica:
 **Causa**: `GOOGLE_SHEET_ID` incorrecto
 **Solución**: Verifica el ID del Google Sheet
 
+### Error: "Username and Password not accepted" (Email)
+**Causa**: SMTP credentials inválidos para Gmail
+**Solución**:
+1. Ve a https://myaccount.google.com → Seguridad
+2. Activa Verificación en 2 pasos
+3. Genera App Password para "Mail"
+4. Configura `SMTP_PASS` con la contraseña de 16 caracteres
+
 ## 📱 Endpoints Disponibles en Producción
 
 Una vez desplegado:
