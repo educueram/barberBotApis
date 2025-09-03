@@ -56,34 +56,40 @@ function formatTime(date) {
 
 
 function formatDateToSpanishPremium(date) {
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const dayAfterTomorrow = new Date(today);
-  dayAfterTomorrow.setDate(today.getDate() + 2);
+  // Usar moment con zona horaria de México para todos los cálculos
+  const now = moment().tz(config.timezone.default);
+  const targetDate = moment(date).tz(config.timezone.default);
   
-  const normalizeDate = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const targetNormalized = normalizeDate(date);
-  const todayNormalized = normalizeDate(today);
-  const tomorrowNormalized = normalizeDate(tomorrow);
-  const yesterdayNormalized = normalizeDate(yesterday);
-  const dayAfterTomorrowNormalized = normalizeDate(dayAfterTomorrow);
+  const today = now.clone().startOf('day');
+  const tomorrow = today.clone().add(1, 'day');
+  const yesterday = today.clone().subtract(1, 'day');
+  const dayAfterTomorrow = today.clone().add(2, 'days');
+  const targetNormalized = targetDate.clone().startOf('day');
   
-  if (targetNormalized.getTime() === todayNormalized.getTime()) {
+  console.log(`🗓️ Comparando fechas en ${config.timezone.default}:`);
+  console.log(`   - Hoy: ${today.format('YYYY-MM-DD')}`);
+  console.log(`   - Objetivo: ${targetNormalized.format('YYYY-MM-DD')}`);
+  console.log(`   - Mañana: ${tomorrow.format('YYYY-MM-DD')}`);
+  
+  if (targetNormalized.isSame(today, 'day')) {
+    console.log(`   → Resultado: HOY`);
     return "HOY";
-  } else if (targetNormalized.getTime() === tomorrowNormalized.getTime()) {
+  } else if (targetNormalized.isSame(tomorrow, 'day')) {
+    console.log(`   → Resultado: MAÑANA`);
     return "MAÑANA";
-  } else if (targetNormalized.getTime() === yesterdayNormalized.getTime()) {
+  } else if (targetNormalized.isSame(yesterday, 'day')) {
+    console.log(`   → Resultado: HOY MISMO`);
     return "HOY MISMO";
-  } else if (targetNormalized.getTime() === dayAfterTomorrowNormalized.getTime()) {
+  } else if (targetNormalized.isSame(dayAfterTomorrow, 'day')) {
+    console.log(`   → Resultado: PASADO MAÑANA`);
     return "PASADO MAÑANA";
   } else {
-    const dayName = date.toLocaleDateString('es-ES', { weekday: 'long' });
-    const dayNumber = date.getDate();
-    const monthName = date.toLocaleDateString('es-ES', { month: 'long' });
-    return `${dayName} ${dayNumber} de ${monthName}`;
+    const dayName = targetDate.format('dddd');
+    const dayNumber = targetDate.format('D');
+    const monthName = targetDate.format('MMMM');
+    const result = `${dayName} ${dayNumber} de ${monthName}`;
+    console.log(`   → Resultado: ${result}`);
+    return result;
   }
 }
 
@@ -295,15 +301,19 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
 
     console.log(`✅ Calendar ID: ${calendarId}, Service Duration: ${serviceDuration} min`);
     
-    // 🆕 CALCULAR 3 DÍAS: ANTERIOR, SOLICITADO, SIGUIENTE
-    const previousDate = new Date(targetDate);
-    previousDate.setDate(targetDate.getDate() - 1);
+    // 🆕 CALCULAR 3 DÍAS: ANTERIOR, SOLICITADO, SIGUIENTE (usando zona horaria correcta)
+    const targetMoment = moment(targetDate).tz(config.timezone.default);
+    const previousDate = targetMoment.clone().subtract(1, 'day').toDate();
+    const nextDate = targetMoment.clone().add(1, 'day').toDate();
     
-    const nextDate = new Date(targetDate);
-    nextDate.setDate(targetDate.getDate() + 1);
+    const today = moment().tz(config.timezone.default);
+    const todayStr = today.format('YYYY-MM-DD');
     
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    console.log(`📅 === CÁLCULO DE 3 DÍAS en ${config.timezone.default} ===`);
+    console.log(`   - Hoy (servidor): ${todayStr}`);
+    console.log(`   - Fecha objetivo: ${targetMoment.format('YYYY-MM-DD')}`);
+    console.log(`   - Fecha anterior: ${moment(previousDate).tz(config.timezone.default).format('YYYY-MM-DD')}`);
+    console.log(`   - Fecha siguiente: ${moment(nextDate).tz(config.timezone.default).format('YYYY-MM-DD')}`);
     
     const daysWithSlots = [];
     
@@ -314,9 +324,13 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     ];
     
     for (const dayInfo of datesToCheck) {
-      const dateStr = dayInfo.date.toISOString().split('T')[0];
+      const dayMoment = moment(dayInfo.date).tz(config.timezone.default);
+      const dateStr = dayMoment.format('YYYY-MM-DD');
       
-      if (dateStr >= todayStr) {
+      console.log(`🔍 Evaluando día ${dayInfo.label}: ${dateStr} (hoy: ${todayStr})`);
+      
+      // Solo procesar días que no sean en el pasado
+      if (dayMoment.isSameOrAfter(today, 'day')) {
         const jsDay = dayInfo.date.getDay();
         const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
         const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
