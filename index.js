@@ -138,32 +138,64 @@ const developmentMockData = {
 // Función auxiliar para desarrollo sin credenciales
 function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   console.log('⚠️ Usando datos simulados - configurar credenciales de Google para producción');
+  console.log(`🌍 Zona horaria configurada: ${config.timezone.default}`);
+  console.log(`🔧 Modo forzado: ${config.workingHours.forceFixedSchedule}`);
   
-  // HORARIO FIJO: 9 AM a 7 PM con descanso de 2 PM a 3 PM (igual que la función real)
-  const workingHours = {
-    start: 9,    // 9 AM
-    end: 19,     // 7 PM
-    lunchStart: 14,  // 2 PM
-    lunchEnd: 15     // 3 PM
+  // Usar configuraciones desde config.js (igual que la función real)
+  const workingHours = config.workingHours.forceFixedSchedule ? {
+    start: config.workingHours.startHour,
+    end: config.workingHours.endHour,
+    lunchStart: config.workingHours.lunchStartHour,
+    lunchEnd: config.workingHours.lunchEndHour
+  } : {
+    start: hours?.start || 9,
+    end: hours?.end || 19,
+    lunchStart: 14,  // 2 PM fijo
+    lunchEnd: 15     // 3 PM fijo
   };
+  
+  console.log(`⚙️ Mock - Horarios de trabajo determinados:`);
+  console.log(`   - Inicio: ${workingHours.start}:00`);
+  console.log(`   - Fin: ${workingHours.end}:00`);
+  console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
   
   const availableSlots = [];
   
-  // Generar slots cada hora
+  // Generar slots cada hora usando moment para zona horaria correcta
+  const targetDate = moment(date).tz(config.timezone.default);
+  const now = moment().tz(config.timezone.default);
+  const minimumBookingTime = now.clone().add(1, 'hour');
+  const isToday = targetDate.isSame(now, 'day');
+  
+  console.log(`📅 Mock - Fechas calculadas en ${config.timezone.default}:`);
+  console.log(`   - Fecha objetivo: ${targetDate.format('YYYY-MM-DD')}`);
+  console.log(`   - Es hoy: ${isToday}`);
+  console.log(`   - Hora actual: ${now.format('HH:mm')}`);
+  console.log(`   - Mínimo para agendar: ${minimumBookingTime.format('HH:mm')}`);
+  
   for (let hour = workingHours.start; hour < workingHours.end; hour++) {
-    // Saltar horario de comida (2 PM - 3 PM)
+    // Saltar horario de comida
     if (hour >= workingHours.lunchStart && hour < workingHours.lunchEnd) {
-      console.log(`⏰ Saltando horario de comida: ${hour}:00`);
+      console.log(`⏰ Mock - Saltando horario de comida: ${hour}:00`);
       continue;
     }
     
-    // Solo generar slot en punto de hora (00 minutos)
+    // Crear momento para este slot
+    const slotTime = targetDate.clone().hour(hour).minute(0).second(0);
+    
+    // Verificar si no es muy pronto para agendar (solo para hoy)
+    if (isToday && slotTime.isBefore(minimumBookingTime)) {
+      console.log(`❌ Mock - Slot muy pronto: ${hour.toString().padStart(2, '0')}:00`);
+      continue;
+    }
+    
     const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
     availableSlots.push(timeSlot);
+    console.log(`✅ Mock - Slot agregado: ${timeSlot}`);
   }
   
   console.log(`   - Mock slots generados: ${availableSlots.length} (cada hora)`);
-  console.log(`   - Horario: 9:00 - 14:00 y 15:00 - 19:00 (intervalos de 1 hora)`);
+  console.log(`   - Horario: ${workingHours.start}:00 - ${workingHours.lunchStart}:00 y ${workingHours.lunchEnd}:00 - ${workingHours.end}:00 (intervalos de 1 hora)`);
   console.log(`   - Slots disponibles: ${availableSlots.join(', ')}`);
   
   return availableSlots;

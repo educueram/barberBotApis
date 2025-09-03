@@ -1,121 +1,88 @@
 # 🚀 Configuración de Railway para ValGop API
 
-## 📋 Variables de Entorno Requeridas
+## Variables de Entorno Requeridas
 
-Configura estas variables en tu proyecto de Railway:
-
-### 🔧 Configuración Básica
-```env
+### 🔧 Variables de Sistema
+```bash
 NODE_ENV=production
 PORT=3000
-```
-
-### 📊 Google APIs (OBLIGATORIAS)
-```env
-GOOGLE_CLIENT_EMAIL=tu-cuenta-servicio@proyecto.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nTU_CLAVE_PRIVADA_AQUI\n-----END PRIVATE KEY-----
-GOOGLE_PROJECT_ID=tu-proyecto-123456
-GOOGLE_SHEET_ID=1zQpN_1MAQVx6DrYwbL8zK49Wv5xu4eDlGqTjKl9d-JU
-```
-
-### ⚠️ **IMPORTANTE - Google Private Key**
-La clave privada debe incluir `\n` para los saltos de línea:
-```
------BEGIN PRIVATE KEY-----\nMIIEvgIBADANBg...\n-----END PRIVATE KEY-----
-```
-
-### 🌍 Configuración del Negocio (Opcional)
-```env
-BUSINESS_EMAIL=goparirisvaleria@gmail.com
-BUSINESS_NAME=Clinica ValGop
-BUSINESS_PHONE=+52 5555555555
-BUSINESS_ADDRESS=CDMX, México
 TIMEZONE=America/Mexico_City
 ```
 
-### 📧 Email SMTP (Para confirmaciones automáticas)
-```env
+### 🕐 Variables de Horarios de Trabajo (NUEVAS - IMPORTANTES)
+```bash
+# Forzar horarios fijos (recomendado para producción)
+FORCE_FIXED_SCHEDULE=true
+
+# Horarios de trabajo
+WORKING_START_HOUR=9        # 9 AM
+WORKING_END_HOUR=19         # 7 PM
+LUNCH_START_HOUR=14         # 2 PM
+LUNCH_END_HOUR=15          # 3 PM
+SLOT_INTERVAL_MINUTES=60   # 1 hora por slot
+```
+
+### 🗂️ Variables de Google APIs
+```bash
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n[tu-clave-privada]\n-----END PRIVATE KEY-----"
+GOOGLE_CLIENT_EMAIL="tu-cuenta-de-servicio@proyecto.iam.gserviceaccount.com"
+GOOGLE_PROJECT_ID="tu-proyecto-id"
+GOOGLE_SHEET_ID="1zQpN_1MAQVx6DrYwbL8zK49Wv5xu4eDlGqTjKl9d-JU"
+```
+
+### 📧 Variables de Email (SMTP)
+```bash
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=goparirisvaleria@gmail.com
 SMTP_PASS=tu-app-password-de-16-caracteres
 ```
 
-⚠️ **IMPORTANTE - Gmail App Password**:
-1. Ve a [myaccount.google.com](https://myaccount.google.com)
-2. Seguridad → Verificación en 2 pasos (debe estar activada)
-3. Contraseñas de aplicaciones → Generar nueva
-4. Usa esa contraseña de 16 caracteres como `SMTP_PASS`
-
-**📧 Email automático incluye:**
-- ✅ Confirmación HTML con todos los detalles
-- ✅ Código de reserva destacado
-- ✅ Información de contacto del negocio
-- ✅ Instrucciones importantes para el cliente
-
-## 🔧 Pasos de Configuración
-
-### 1. **Deploy en Railway**
+### 🏢 Variables del Negocio
 ```bash
-# Conecta tu repositorio a Railway
-# Railway detectará automáticamente que es Node.js
+BUSINESS_EMAIL=goparirisvaleria@gmail.com
+BUSINESS_NAME="Clinica ValGop"
+BUSINESS_PHONE="+52 5555555555"
+BUSINESS_ADDRESS="CDMX, México"
 ```
 
-### 2. **Configurar Variables de Entorno**
-- Ve a tu proyecto en Railway
-- Tab "Variables"
-- Agrega TODAS las variables listadas arriba
-- **IMPORTANTE**: `GOOGLE_PRIVATE_KEY` con `\n` para saltos de línea
+## 🔧 Configuración Paso a Paso
 
-### 3. **Configurar Dominio Personalizado (Opcional)**
-- Tab "Settings" → "Domains"
-- Agrega tu dominio personalizado
-- Actualiza la configuración de CORS en `index.js` si usas dominio personalizado
+1. **Ve a tu proyecto en Railway**
+2. **Clickea en Variables**
+3. **Agrega todas las variables de arriba**
+4. **Redeploya el proyecto**
 
-### 4. **Verificar Despliegue**
-Después del deploy, verifica:
-- ✅ `https://tu-app.railway.app/api/consulta-fecha-actual`
-- ✅ `https://tu-app.railway.app/api-docs` (Swagger UI)
+## ⚠️ Variables Críticas para Horarios
 
-## 🐛 Solución de Errores Comunes
+Las siguientes variables son **ESENCIALES** para que los horarios funcionen correctamente:
 
-### Error: "Failed to fetch" en Swagger
-**Causa**: CORS o URL incorrecta
-**Solución**: 
-1. Verifica que `NODE_ENV=production` esté configurado
-2. Reemplaza `your-app.railway.app` con tu URL real en el código
+- `FORCE_FIXED_SCHEDULE=true` - Fuerza el uso de horarios fijos
+- `WORKING_START_HOUR=9` - Hora de inicio (9 AM)
+- `WORKING_END_HOUR=19` - Hora de fin (7 PM)  
+- `LUNCH_START_HOUR=14` - Inicio de comida (2 PM)
+- `LUNCH_END_HOUR=15` - Fin de comida (3 PM)
+- `TIMEZONE=America/Mexico_City` - Zona horaria correcta
 
-### Error: "Google APIs permission denied"
-**Causa**: Credenciales incorrectas o permisos faltantes
-**Solución**:
-1. Verifica las variables `GOOGLE_*` en Railway
-2. Asegúrate de que la cuenta de servicio tenga permisos en el Google Sheet
+## 🧪 Validación
 
-### Error: "Sheet not found"
-**Causa**: `GOOGLE_SHEET_ID` incorrecto
-**Solución**: Verifica el ID del Google Sheet
+Después de agregar las variables:
 
-### Error: "Username and Password not accepted" (Email)
-**Causa**: SMTP credentials inválidos para Gmail
-**Solución**:
-1. Ve a https://myaccount.google.com → Seguridad
-2. Activa Verificación en 2 pasos
-3. Genera App Password para "Mail"
-4. Configura `SMTP_PASS` con la contraseña de 16 caracteres
+1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-04`
+2. Verifica que los horarios sean: **9:00, 10:00, 11:00, 12:00, 13:00, 15:00, 16:00, 17:00, 18:00**
+3. NO debe aparecer: horarios antes de 9:00, después de 19:00, o entre 14:00-15:00
 
-## 📱 Endpoints Disponibles en Producción
+## 🚨 Problemas Comunes
 
-Una vez desplegado:
-- `GET /api/consulta-disponibilidad`
-- `POST /api/agenda-cita`
-- `POST /api/cancela-cita`
-- `GET /api/consulta-fecha-actual`
-- `GET /api-docs` (Documentación Swagger)
+### Si ves horarios incorrectos (03:00, 04:00, etc.):
+- ✅ Agrega `FORCE_FIXED_SCHEDULE=true`
+- ✅ Agrega `TIMEZONE=America/Mexico_City`
+- ✅ Redeploya
 
-## 🔍 Debug en Producción
+### Si no se excluye horario de comida:
+- ✅ Agrega `LUNCH_START_HOUR=14` y `LUNCH_END_HOUR=15`
+- ✅ Redeploya
 
-Para debugear problemas:
-- `POST /api/debug-agenda`
-- `POST /api/debug-sheets`
-
-Revisa los logs en Railway Dashboard → "Logs" 
+### Si los intervalos son de 30 min:
+- ✅ Agrega `SLOT_INTERVAL_MINUTES=60`
+- ✅ Redeploya 

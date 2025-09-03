@@ -14,41 +14,52 @@ const moment = require('moment-timezone');
 async function findAvailableSlots(calendarId, date, durationMinutes, hours) {
   try {
     console.log(`📅 Buscando slots disponibles para ${calendarId} el ${date.toISOString().split('T')[0]}`);
+    console.log(`🌍 Zona horaria configurada: ${config.timezone.default}`);
+    console.log(`🔧 Modo forzado: ${config.workingHours.forceFixedSchedule}`);
     
     const calendar = await getCalendarInstance();
     
-    // HORARIO FIJO: 9 AM a 7 PM con descanso de 2 PM a 3 PM
-    const workingHours = {
-      start: 9,    // 9 AM
-      end: 19,     // 7 PM
-      lunchStart: 14,  // 2 PM
-      lunchEnd: 15     // 3 PM
+    // Usar configuraciones desde config.js (horarios fijos o desde sheets)
+    const workingHours = config.workingHours.forceFixedSchedule ? {
+      start: config.workingHours.startHour,
+      end: config.workingHours.endHour,
+      lunchStart: config.workingHours.lunchStartHour,
+      lunchEnd: config.workingHours.lunchEndHour
+    } : {
+      start: hours?.start || 9,
+      end: hours?.end || 19,
+      lunchStart: 14,  // 2 PM fijo
+      lunchEnd: 15     // 3 PM fijo
     };
     
-    // Configurar horarios del día
-    const startOfDay = new Date(date);
-    startOfDay.setHours(workingHours.start, 0, 0, 0);
+    console.log(`⚙️ Horarios de trabajo determinados:`);
+    console.log(`   - Inicio: ${workingHours.start}:00`);
+    console.log(`   - Fin: ${workingHours.end}:00`);
+    console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
     
-    const endOfDay = new Date(date);
-    endOfDay.setHours(workingHours.end, 0, 0, 0);
+    // Crear fechas usando moment con zona horaria correcta
+    const targetDate = moment(date).tz(config.timezone.default);
     
-    const lunchStart = new Date(date);
-    lunchStart.setHours(workingHours.lunchStart, 0, 0, 0);
+    const startOfDay = targetDate.clone().hour(workingHours.start).minute(0).second(0);
+    const endOfDay = targetDate.clone().hour(workingHours.end).minute(0).second(0);
+    const lunchStart = targetDate.clone().hour(workingHours.lunchStart).minute(0).second(0);
+    const lunchEnd = targetDate.clone().hour(workingHours.lunchEnd).minute(0).second(0);
     
-    const lunchEnd = new Date(date);
-    lunchEnd.setHours(workingHours.lunchEnd, 0, 0, 0);
+    console.log(`📅 Fechas calculadas en ${config.timezone.default}:`);
+    console.log(`   - Inicio del día: ${startOfDay.format('YYYY-MM-DD HH:mm:ss z')}`);
+    console.log(`   - Fin del día: ${endOfDay.format('YYYY-MM-DD HH:mm:ss z')}`);
+    console.log(`   - Comida inicio: ${lunchStart.format('HH:mm')}`);
+    console.log(`   - Comida fin: ${lunchEnd.format('HH:mm')}`);
     
-    const now = new Date();
-    const minimumBookingTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hora de anticipación
+    const now = moment().tz(config.timezone.default);
+    const minimumBookingTime = now.clone().add(1, 'hour');
     
-    const isToday = (date.getFullYear() === now.getFullYear() && 
-                     date.getMonth() === now.getMonth() && 
-                     date.getDate() === now.getDate());
+    const isToday = targetDate.isSame(now, 'day');
 
-    console.log(`   - Horario de trabajo: ${workingHours.start}:00 - ${workingHours.end}:00`);
-    console.log(`   - Horario de comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00 (EXCLUIDO)`);
     console.log(`   - Duración del servicio: ${durationMinutes} minutos`);
     console.log(`   - Es hoy: ${isToday}`);
+    console.log(`   - Hora actual: ${now.format('HH:mm')}`);
+    console.log(`   - Mínimo para agendar: ${minimumBookingTime.format('HH:mm')}`);
 
     // Obtener eventos existentes en el calendario
     const response = await calendar.events.list({
@@ -64,70 +75,82 @@ async function findAvailableSlots(calendarId, date, durationMinutes, hours) {
 
     // Agregar el horario de comida como un evento bloqueado
     const busySlots = events.map(event => ({
-      start: new Date(event.start.dateTime || event.start.date),
-      end: new Date(event.end.dateTime || event.end.date),
+      start: moment(event.start.dateTime || event.start.date).tz(config.timezone.default),
+      end: moment(event.end.dateTime || event.end.date).tz(config.timezone.default),
       type: 'appointment'
     }));
 
     // Agregar horario de comida como slot bloqueado
     busySlots.push({
-      start: new Date(lunchStart.getTime()),
-      end: new Date(lunchEnd.getTime()),
+      start: lunchStart.clone(),
+      end: lunchEnd.clone(),
       type: 'lunch'
     });
 
     // Ordenar slots ocupados por hora de inicio
-    busySlots.sort((a, b) => a.start - b.start);
+    busySlots.sort((a, b) => a.start.valueOf() - b.start.valueOf());
 
     console.log(`   - Slots ocupados (incluyendo comida): ${busySlots.length}`);
 
     // Función auxiliar para verificar si un horario está en periodo de comida
     const isLunchTime = (time) => {
-      return time >= lunchStart && time < lunchEnd;
+      return time.isSameOrAfter(lunchStart) && time.isBefore(lunchEnd);
     };
 
     // Función auxiliar para verificar si un horario está fuera del horario laboral
     const isOutsideWorkingHours = (time) => {
-      const hour = time.getHours();
+      const hour = time.hour();
       return hour < workingHours.start || hour >= workingHours.end;
     };
 
     // Generar slots disponibles
     const availableSlots = [];
-    let currentTime = new Date(startOfDay.getTime());
+    let currentTime = startOfDay.clone();
 
     // Procesar gaps entre eventos
     busySlots.forEach(slot => {
-      const gapEnd = new Date(slot.start.getTime());
+      const gapEnd = slot.start.clone();
       
       // Generar slots en el gap (slots de 1 hora)
-      while (new Date(currentTime.getTime() + 60 * 60000) <= gapEnd) {
+      while (currentTime.clone().add(1, 'hour').isSameOrBefore(gapEnd)) {
         // Verificar que no esté en horario de comida ni fuera de horario laboral
         if (!isOutsideWorkingHours(currentTime) && 
             !isLunchTime(currentTime) &&
-            (!isToday || currentTime >= minimumBookingTime)) {
+            (!isToday || currentTime.isSameOrAfter(minimumBookingTime))) {
           
-          const timeSlot = formatTime(currentTime);
+          const timeSlot = currentTime.format('HH:mm');
           availableSlots.push(timeSlot);
+          console.log(`   ✅ Slot agregado: ${timeSlot}`);
+        } else {
+          const reason = isOutsideWorkingHours(currentTime) ? 'fuera de horario' :
+                        isLunchTime(currentTime) ? 'horario de comida' : 'muy pronto';
+          console.log(`   ❌ Slot rechazado ${currentTime.format('HH:mm')}: ${reason}`);
         }
-        currentTime.setTime(currentTime.getTime() + 60 * 60000); // Incrementar de hora en hora (60 minutos)
+        currentTime.add(1, 'hour'); // Incrementar de hora en hora (60 minutos)
       }
       
       // Mover al final del evento ocupado
-      currentTime = slot.end > currentTime ? new Date(slot.end.getTime()) : currentTime;
+      if (slot.end.isAfter(currentTime)) {
+        currentTime = slot.end.clone();
+      }
     });
 
     // Generar slots después del último evento hasta el final del día (slots de 1 hora)
-    while (new Date(currentTime.getTime() + 60 * 60000) <= endOfDay) {
+    while (currentTime.clone().add(1, 'hour').isSameOrBefore(endOfDay)) {
       // Verificar que no esté en horario de comida ni fuera de horario laboral
       if (!isOutsideWorkingHours(currentTime) && 
           !isLunchTime(currentTime) &&
-          (!isToday || currentTime >= minimumBookingTime)) {
+          (!isToday || currentTime.isSameOrAfter(minimumBookingTime))) {
         
-        const timeSlot = formatTime(currentTime);
+        const timeSlot = currentTime.format('HH:mm');
         availableSlots.push(timeSlot);
+        console.log(`   ✅ Slot final agregado: ${timeSlot}`);
+      } else {
+        const reason = isOutsideWorkingHours(currentTime) ? 'fuera de horario' :
+                      isLunchTime(currentTime) ? 'horario de comida' : 'muy pronto';
+        console.log(`   ❌ Slot final rechazado ${currentTime.format('HH:mm')}: ${reason}`);
       }
-      currentTime.setTime(currentTime.getTime() + 60 * 60000); // Incrementar de hora en hora (60 minutos)
+      currentTime.add(1, 'hour'); // Incrementar de hora en hora (60 minutos)
     }
 
     console.log(`   - Slots disponibles (sin horario de comida): ${availableSlots.length} (cada hora)`);
