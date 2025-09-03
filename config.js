@@ -82,7 +82,18 @@ const config = {
     endHour: parseInt(process.env.WORKING_END_HOUR) || 19,     // 7 PM  
     lunchStartHour: parseInt(process.env.LUNCH_START_HOUR) || 14, // 2 PM
     lunchEndHour: parseInt(process.env.LUNCH_END_HOUR) || 15,     // 3 PM
-    slotIntervalMinutes: parseInt(process.env.SLOT_INTERVAL_MINUTES) || 60 // 1 hora
+    slotIntervalMinutes: parseInt(process.env.SLOT_INTERVAL_MINUTES) || 60, // 1 hora
+    
+    // Horarios especiales por día de la semana
+    saturday: {
+      enabled: true,
+      startHour: parseInt(process.env.SATURDAY_START_HOUR) || 10, // 10 AM
+      endHour: parseInt(process.env.SATURDAY_END_HOUR) || 12,     // 12 PM
+      hasLunch: false // No hay horario de comida los sábados
+    },
+    sunday: {
+      enabled: process.env.SUNDAY_ENABLED === 'true' || false // Domingos cerrado por defecto
+    }
   },
 
   validation: {

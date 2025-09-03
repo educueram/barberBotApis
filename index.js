@@ -147,47 +147,95 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   console.log(`🌍 Zona horaria configurada: ${config.timezone.default}`);
   console.log(`🔧 Modo forzado: ${config.workingHours.forceFixedSchedule}`);
   
-  // Usar configuraciones desde config.js (igual que la función real)
+  // Crear momento para obtener el día de la semana
+  const dateMoment = moment(date).tz(config.timezone.default);
+  const dayOfWeek = dateMoment.day(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  
+  console.log(`📅 Mock - Día de la semana: ${dayNames[dayOfWeek]} (${dayOfWeek})`);
+  
+  // VALIDACIÓN: DOMINGO - No se trabaja
+  if (dayOfWeek === 0) { // Domingo
+    console.log(`🚫 Mock - DOMINGO - No hay servicio los domingos`);
+    return {
+      slots: [],
+      message: '🚫 No hay servicio los domingos. Por favor, selecciona otro día de la semana.',
+      dayType: 'sunday-closed'
+    };
+  }
+  
+  // VALIDACIÓN: SÁBADO - Horario especial (10 AM - 12 PM)
+  if (dayOfWeek === 6) { // Sábado
+    console.log(`📅 Mock - SÁBADO - Horario especial: 10:00 AM - 12:00 PM`);
+    const saturdaySlots = mockGenerateSlotsForDay(dateMoment, {
+      start: config.workingHours.saturday.startHour,
+      end: config.workingHours.saturday.endHour,
+      hasLunch: false
+    });
+    
+    if (saturdaySlots.length === 0) {
+      return {
+        slots: [],
+        message: '📅 Sábados trabajamos de 10:00 AM a 12:00 PM, pero no hay espacios disponibles.',
+        dayType: 'saturday-full'
+      };
+    }
+    
+    return {
+      slots: saturdaySlots,
+      message: null,
+      dayType: 'saturday-special'
+    };
+  }
+  
+  // HORARIOS NORMALES (Lunes a Viernes)
   const workingHours = config.workingHours.forceFixedSchedule ? {
     start: config.workingHours.startHour,
     end: config.workingHours.endHour,
     lunchStart: config.workingHours.lunchStartHour,
-    lunchEnd: config.workingHours.lunchEndHour
+    lunchEnd: config.workingHours.lunchEndHour,
+    hasLunch: true
   } : {
     start: hours?.start || 9,
     end: hours?.end || 19,
     lunchStart: 14,  // 2 PM fijo
-    lunchEnd: 15     // 3 PM fijo
+    lunchEnd: 15,    // 3 PM fijo
+    hasLunch: true
   };
   
-  console.log(`⚙️ Mock - Horarios de trabajo determinados:`);
+  console.log(`⚙️ Mock - Horarios de trabajo (${dayNames[dayOfWeek]}):`);
   console.log(`   - Inicio: ${workingHours.start}:00`);
   console.log(`   - Fin: ${workingHours.end}:00`);
   console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
   
-  const availableSlots = [];
+  const slots = mockGenerateSlotsForDay(dateMoment, workingHours);
   
-  // Generar slots cada hora usando moment para zona horaria correcta
-  const targetDate = moment(date).tz(config.timezone.default);
+  return {
+    slots: slots,
+    message: null,
+    dayType: 'weekday-normal'
+  };
+}
+
+// Función auxiliar para generar slots mock
+function mockGenerateSlotsForDay(dateMoment, workingHours) {
+  const availableSlots = [];
   const now = moment().tz(config.timezone.default);
   const minimumBookingTime = now.clone().add(1, 'hour');
-  const isToday = targetDate.isSame(now, 'day');
+  const isToday = dateMoment.isSame(now, 'day');
   
-  console.log(`📅 Mock - Fechas calculadas en ${config.timezone.default}:`);
-  console.log(`   - Fecha objetivo: ${targetDate.format('YYYY-MM-DD')}`);
+  console.log(`📅 Mock - Generando slots para ${dateMoment.format('YYYY-MM-DD')}`);
   console.log(`   - Es hoy: ${isToday}`);
-  console.log(`   - Hora actual: ${now.format('HH:mm')}`);
-  console.log(`   - Mínimo para agendar: ${minimumBookingTime.format('HH:mm')}`);
   
   for (let hour = workingHours.start; hour < workingHours.end; hour++) {
-    // Saltar horario de comida
-    if (hour >= workingHours.lunchStart && hour < workingHours.lunchEnd) {
+    // Saltar horario de comida (si aplica)
+    if (workingHours.hasLunch && hour >= workingHours.lunchStart && hour < workingHours.lunchEnd) {
       console.log(`⏰ Mock - Saltando horario de comida: ${hour}:00`);
       continue;
     }
     
     // Crear momento para este slot
-    const slotTime = targetDate.clone().hour(hour).minute(0).second(0);
+    const slotTime = dateMoment.clone().hour(hour).minute(0).second(0);
     
     // Verificar si no es muy pronto para agendar (solo para hoy)
     if (isToday && slotTime.isBefore(minimumBookingTime)) {
@@ -201,7 +249,6 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   }
   
   console.log(`   - Mock slots generados: ${availableSlots.length} (cada hora)`);
-  console.log(`   - Horario: ${workingHours.start}:00 - ${workingHours.lunchStart}:00 y ${workingHours.lunchEnd}:00 - ${workingHours.end}:00 (intervalos de 1 hora)`);
   console.log(`   - Slots disponibles: ${availableSlots.join(', ')}`);
   
   return availableSlots;
@@ -341,20 +388,50 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
           
           const totalSlots = Math.floor((workingHours.end - workingHours.start) * 60 / parseInt(serviceDuration));
           
-          let availableSlots;
+          let availableSlots = [];
+          let specialMessage = null;
+          let dayType = 'normal';
+          
           try {
             // Intentar usar Google Calendar API real
-            availableSlots = await findAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), workingHours);
+            const slotResult = await findAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), workingHours);
+            
+            if (typeof slotResult === 'object' && slotResult.slots !== undefined) {
+              // Nueva respuesta con estructura de objeto
+              availableSlots = slotResult.slots;
+              specialMessage = slotResult.message;
+              dayType = slotResult.dayType;
+            } else {
+              // Respuesta antigua (solo array)
+              availableSlots = slotResult;
+            }
           } catch (error) {
             console.log(`⚠️ Error consultando calendar real, usando mock: ${error.message}`);
             // Fallback a datos simulados si falla la API real
-            availableSlots = mockFindAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), workingHours);
+            const mockResult = mockFindAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), workingHours);
+            
+            if (typeof mockResult === 'object' && mockResult.slots !== undefined) {
+              availableSlots = mockResult.slots;
+              specialMessage = mockResult.message;
+              dayType = mockResult.dayType;
+            } else {
+              availableSlots = mockResult;
+            }
+          }
+          
+          // Si hay un mensaje especial (domingo cerrado, sábado sin disponibilidad), retornarlo inmediatamente
+          if (specialMessage) {
+            console.log(`⚠️ Mensaje especial para ${dayInfo.label}: ${specialMessage}`);
+            return res.json(createJsonResponse({ 
+              respuesta: specialMessage 
+            }));
           }
           
           const occupiedSlots = totalSlots - availableSlots.length;
           const occupationPercentage = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
           
           console.log(`   - Total slots: ${totalSlots}, Disponibles: ${availableSlots.length}, Ocupación: ${occupationPercentage}%`);
+          console.log(`   - Tipo de día: ${dayType}`);
           
           if (availableSlots.length > 0) {
             daysWithSlots.push({

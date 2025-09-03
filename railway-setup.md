@@ -14,12 +14,17 @@ TIMEZONE=America/Mexico_City
 # Forzar horarios fijos (recomendado para producción)
 FORCE_FIXED_SCHEDULE=true
 
-# Horarios de trabajo
+# Horarios de trabajo (Lunes a Viernes)
 WORKING_START_HOUR=9        # 9 AM
 WORKING_END_HOUR=19         # 7 PM
 LUNCH_START_HOUR=14         # 2 PM
 LUNCH_END_HOUR=15          # 3 PM
 SLOT_INTERVAL_MINUTES=60   # 1 hora por slot
+
+# Horarios especiales de fin de semana
+SATURDAY_START_HOUR=10      # Sábado: 10 AM
+SATURDAY_END_HOUR=12        # Sábado: 12 PM
+SUNDAY_ENABLED=false        # Domingos cerrado (no cambiar)
 ```
 
 ### 🗂️ Variables de Google APIs
@@ -68,9 +73,19 @@ Las siguientes variables son **ESENCIALES** para que los horarios funcionen corr
 
 Después de agregar las variables:
 
-1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-04`
+### **Lunes a Viernes:**
+1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-05` (jueves)
 2. Verifica que los horarios sean: **9:00, 10:00, 11:00, 12:00, 13:00, 15:00, 16:00, 17:00, 18:00**
 3. NO debe aparecer: horarios antes de 9:00, después de 19:00, o entre 14:00-15:00
+
+### **Sábados:**
+1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-06` (sábado)
+2. Verifica que los horarios sean: **10:00, 11:00**
+3. NO debe aparecer: horarios fuera de 10:00-12:00
+
+### **Domingos:**
+1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-07` (domingo)
+2. Debe mostrar: **"🚫 No hay servicio los domingos. Por favor, selecciona otro día de la semana."**
 
 ## 🚨 Problemas Comunes
 
@@ -85,4 +100,16 @@ Después de agregar las variables:
 
 ### Si los intervalos son de 30 min:
 - ✅ Agrega `SLOT_INTERVAL_MINUTES=60`
-- ✅ Redeploya 
+- ✅ Redeploya
+
+### Si aparecen horarios los domingos:
+- ✅ Verifica `SUNDAY_ENABLED=false`
+- ✅ Redeploya
+
+### Si el sábado no muestra 10:00-12:00:
+- ✅ Agrega `SATURDAY_START_HOUR=10` y `SATURDAY_END_HOUR=12`
+- ✅ Redeploya
+
+### Si sábado tiene horario de comida:
+- ✅ Los sábados no tienen horario de comida automáticamente
+- ✅ Solo trabaja de 10:00 AM a 12:00 PM 
