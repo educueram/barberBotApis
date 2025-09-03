@@ -138,18 +138,35 @@ const developmentMockData = {
 // Función auxiliar para desarrollo sin credenciales
 function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   console.log('⚠️ Usando datos simulados - configurar credenciales de Google para producción');
-  const availableSlots = [];
-  const startHour = hours.start;
-  const endHour = hours.end;
   
-  for (let hour = startHour; hour < endHour; hour++) {
-    for (let minute = 0; minute < 60; minute += 30) {
-      const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-      availableSlots.push(timeSlot);
+  // HORARIO FIJO: 9 AM a 7 PM con descanso de 2 PM a 3 PM (igual que la función real)
+  const workingHours = {
+    start: 9,    // 9 AM
+    end: 19,     // 7 PM
+    lunchStart: 14,  // 2 PM
+    lunchEnd: 15     // 3 PM
+  };
+  
+  const availableSlots = [];
+  
+  // Generar slots cada hora
+  for (let hour = workingHours.start; hour < workingHours.end; hour++) {
+    // Saltar horario de comida (2 PM - 3 PM)
+    if (hour >= workingHours.lunchStart && hour < workingHours.lunchEnd) {
+      console.log(`⏰ Saltando horario de comida: ${hour}:00`);
+      continue;
     }
+    
+    // Solo generar slot en punto de hora (00 minutos)
+    const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
+    availableSlots.push(timeSlot);
   }
   
-  return availableSlots.slice(0, 6);
+  console.log(`   - Mock slots generados: ${availableSlots.length} (cada hora)`);
+  console.log(`   - Horario: 9:00 - 14:00 y 15:00 - 19:00 (intervalos de 1 hora)`);
+  console.log(`   - Slots disponibles: ${availableSlots.join(', ')}`);
+  
+  return availableSlots;
 }
 
 // =================================================================
