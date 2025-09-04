@@ -97,7 +97,7 @@ const config = {
   },
 
   validation: {
-    minBookingHours: 1, // Mínimo 1 hora de anticipación
+    minBookingHours: 2, // Mínimo 2 horas de anticipación
     maxDaysAhead: 90,   // Máximo 90 días en el futuro
     emailRegex: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
     phoneMinLength: 10

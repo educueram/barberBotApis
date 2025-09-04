@@ -221,7 +221,7 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
 function mockGenerateSlotsForDay(dateMoment, workingHours) {
   const availableSlots = [];
   const now = moment().tz(config.timezone.default);
-  const minimumBookingTime = now.clone().add(1, 'hour');
+  const minimumBookingTime = now.clone().add(2, 'hours');
   const isToday = dateMoment.isSame(now, 'day');
   
   console.log(`📅 Mock - Generando slots para ${dateMoment.format('YYYY-MM-DD')}`);
@@ -381,7 +381,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       // Verificar si aún estamos dentro del horario laboral
       const currentHour = today.hour();
       const isWorkingDay = todayWorkingHours !== null;
-      const isWithinWorkingHours = isWorkingDay && currentHour < todayWorkingHours.end - 1; // -1 porque necesitamos al menos 1 hora
+      const isWithinWorkingHours = isWorkingDay && currentHour < todayWorkingHours.end - 2; // -2 porque necesitamos al menos 2 horas
       
       console.log(`   - Hora actual: ${currentHour}:${today.minute().toString().padStart(2, '0')}`);
       console.log(`   - Es día laboral: ${isWorkingDay}`);
@@ -984,7 +984,7 @@ app.post('/api/agenda-cita', async (req, res) => {
     // PASO 2: VALIDACIÓN DE TIEMPO (lógica original con zona horaria corregida)
     const now = moment().tz(config.timezone.default);
     const startTime = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', config.timezone.default);
-    const minimumBookingTime = moment(now).add(1, 'hour');
+    const minimumBookingTime = moment(now).add(2, 'hours');
 
     console.log('=== VALIDACIÓN DE TIEMPO (ZONA HORARIA MÉXICO) ===');
     console.log('now:', now.format('YYYY-MM-DD HH:mm:ss z'));
@@ -1002,9 +1002,9 @@ app.post('/api/agenda-cita', async (req, res) => {
     
     if (isToday && startTime.isBefore(minimumBookingTime)) {
       const time12h = formatTimeTo12Hour(time);
-      console.log('❌ ERROR: Cita demasiado pronto (menos de 1 hora)');
+      console.log('❌ ERROR: Cita demasiado pronto (menos de 2 horas)');
       return res.json({ 
-        respuesta: `🤚 Debes agendar con al menos una hora de anticipación. No puedes reservar para las ${time12h} de hoy.` 
+        respuesta: `🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las ${time12h} de hoy.` 
       });
     }
 

@@ -130,7 +130,7 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
     }
     
     const now = moment().tz(config.timezone.default);
-    const minimumBookingTime = now.clone().add(1, 'hour');
+    const minimumBookingTime = now.clone().add(2, 'hours');
     
     const isToday = dateMoment.isSame(now, 'day');
 
