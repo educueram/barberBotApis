@@ -128,7 +128,9 @@ Content-Type: application/json
 - ✅ Campos obligatorios completos
 - ✅ Formato de email válido (regex)
 - ✅ Teléfono mínimo 10 caracteres
-- ✅ Tiempo mínimo 1 hora de anticipación
+- ✅ **No permite fechas pasadas** - Solo fechas de hoy en adelante
+- ✅ **Tiempo mínimo 2 horas de anticipación** - Para citas del mismo día
+- ✅ **Sugerencia de siguiente día hábil** - Cuando no se puede agendar hoy
 - ✅ Verificación de conflictos en calendario
 - ✅ Validación de calendario y servicio existente
 
@@ -143,12 +145,26 @@ Content-Type: application/json
 **Funcionalidades adicionales:**
 - ✅ **Email automático**: Se envía confirmación por email al cliente
 - ✅ **Zona horaria correcta**: Manejo correcto de timezone México (America/Mexico_City)
-- ✅ **Validaciones mejoradas**: Permite agendar el mismo día con 1+ hora de anticipación
+- ✅ **Validaciones mejoradas**: Requiere 2 horas de anticipación para el mismo día y sugiere siguiente día hábil
 
-**Respuesta de error (validación):**
+**Respuesta de error (validación campos):**
 ```json
 {
   "respuesta": "⚠️ Error: Faltan o son inválidos los siguientes datos obligatorios:\n\n❌ clientEmail\n❌ clientPhone\n\nEl bot debe recopilar TODOS los datos antes de enviar la solicitud."
+}
+```
+
+**Respuesta de error (fecha pasada):**
+```json
+{
+  "respuesta": "❌ No puedes agendar citas para fechas pasadas.\n\n🔍 Para agendar una cita, primero consulta la disponibilidad para hoy o fechas futuras."
+}
+```
+
+**Respuesta de error (menos de 2 horas):**
+```json
+{
+  "respuesta": "🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las 2:00 PM de hoy.\n\n📅 El siguiente día hábil es: Mañana (2025-08-28)\n\n🔍 Te recomiendo consultar la disponibilidad para esa fecha antes de agendar tu cita."
 }
 ```
 

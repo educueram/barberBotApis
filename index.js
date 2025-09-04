@@ -117,6 +117,49 @@ function getUrgencyText(percentage) {
   return '¡Gran disponibilidad!';
 }
 
+// Nueva función: Encontrar el siguiente día hábil
+function findNextWorkingDay(calendarNumber, startDate, hoursData) {
+  try {
+    console.log(`🔍 === BUSCANDO SIGUIENTE DÍA HÁBIL ===`);
+    console.log(`   - Calendar: ${calendarNumber}`);
+    console.log(`   - Fecha inicio: ${startDate.format('YYYY-MM-DD')}`);
+    
+    let nextDay = startDate.clone().add(1, 'day').startOf('day');
+    let maxDays = 14; // Buscar hasta 14 días adelante
+    let attempts = 0;
+    
+    while (attempts < maxDays) {
+      const jsDay = nextDay.toDate().getDay();
+      const sheetDay = (jsDay === 0) ? 7 : jsDay; // Convertir domingo de 0 a 7
+      
+      console.log(`   - Evaluando: ${nextDay.format('YYYY-MM-DD')} (JS day: ${jsDay}, Sheet day: ${sheetDay})`);
+      
+      // Buscar horarios para este día
+      const workingHours = findWorkingHours(calendarNumber, sheetDay, hoursData);
+      
+      if (workingHours) {
+        console.log(`   ✅ Día hábil encontrado: ${nextDay.format('YYYY-MM-DD')}`);
+        console.log(`      - Horario: ${workingHours.start}:00 - ${workingHours.end}:00`);
+        return nextDay;
+      } else {
+        console.log(`   ❌ No es día hábil: ${nextDay.format('YYYY-MM-DD')}`);
+      }
+      
+      nextDay.add(1, 'day');
+      attempts++;
+    }
+    
+    // Si no encontró ningún día hábil en 14 días, retornar mañana como fallback
+    console.log(`⚠️ No se encontró día hábil en ${maxDays} días, usando mañana como fallback`);
+    return startDate.clone().add(1, 'day').startOf('day');
+    
+  } catch (error) {
+    console.error('❌ Error buscando siguiente día hábil:', error.message);
+    // Fallback: retornar mañana
+    return startDate.clone().add(1, 'day').startOf('day');
+  }
+}
+
 // =================================================================
 // 📡 DATOS DE RESPALDO PARA DESARROLLO
 // =================================================================
@@ -981,12 +1024,12 @@ app.post('/api/agenda-cita', async (req, res) => {
 
     console.log('✅ VALIDACIÓN EXITOSA - Todos los campos críticos presentes');
 
-    // PASO 2: VALIDACIÓN DE TIEMPO (lógica original con zona horaria corregida)
+    // PASO 2: VALIDACIÓN DE FECHA Y TIEMPO (mejorada)
     const now = moment().tz(config.timezone.default);
     const startTime = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', config.timezone.default);
     const minimumBookingTime = moment(now).add(2, 'hours');
 
-    console.log('=== VALIDACIÓN DE TIEMPO (ZONA HORARIA MÉXICO) ===');
+    console.log('=== VALIDACIÓN DE FECHA Y TIEMPO (ZONA HORARIA MÉXICO) ===');
     console.log('now:', now.format('YYYY-MM-DD HH:mm:ss z'));
     console.log('startTime:', startTime.format('YYYY-MM-DD HH:mm:ss z'));
     console.log('minimumBookingTime:', minimumBookingTime.format('YYYY-MM-DD HH:mm:ss z'));
@@ -996,6 +1039,20 @@ app.post('/api/agenda-cita', async (req, res) => {
       return res.json({ respuesta: '⚠️ Error: El formato de fecha o hora es inválido.' });
     }
 
+    // NUEVA VALIDACIÓN: No permitir fechas en el pasado
+    const startOfToday = now.clone().startOf('day');
+    const requestedDate = startTime.clone().startOf('day');
+    
+    if (requestedDate.isBefore(startOfToday)) {
+      console.log('❌ ERROR: Fecha en el pasado');
+      console.log(`   - Fecha solicitada: ${requestedDate.format('YYYY-MM-DD')}`);
+      console.log(`   - Hoy: ${startOfToday.format('YYYY-MM-DD')}`);
+      
+      return res.json({ 
+        respuesta: '❌ No puedes agendar citas para fechas pasadas.\n\n🔍 Para agendar una cita, primero consulta la disponibilidad para hoy o fechas futuras.' 
+      });
+    }
+
     const isToday = startTime.isSame(now, 'day');
     console.log('isToday:', isToday);
     console.log('startTime < minimumBookingTime:', startTime.isBefore(minimumBookingTime));
@@ -1003,8 +1060,25 @@ app.post('/api/agenda-cita', async (req, res) => {
     if (isToday && startTime.isBefore(minimumBookingTime)) {
       const time12h = formatTimeTo12Hour(time);
       console.log('❌ ERROR: Cita demasiado pronto (menos de 2 horas)');
+      
+      // Obtener datos de configuración para sugerir siguiente día hábil
+      let sheetDataForSuggestion;
+      try {
+        sheetDataForSuggestion = await getSheetData();
+      } catch (error) {
+        console.log('⚠️ No se pudo obtener configuración para sugerencia');
+        return res.json({ 
+          respuesta: `🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las ${time12h} de hoy.\n\n🔍 Consulta disponibilidad para mañana en adelante.` 
+        });
+      }
+      
+      // Encontrar siguiente día hábil
+      const nextWorkingDay = findNextWorkingDay(calendarNumber, now, sheetDataForSuggestion.hours);
+      const nextWorkingDayName = formatDateToSpanishPremium(nextWorkingDay.toDate());
+      const nextWorkingDateStr = nextWorkingDay.format('YYYY-MM-DD');
+      
       return res.json({ 
-        respuesta: `🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las ${time12h} de hoy.` 
+        respuesta: `🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las ${time12h} de hoy.\n\n📅 El siguiente día hábil es: ${nextWorkingDayName} (${nextWorkingDateStr})\n\n🔍 Te recomiendo consultar la disponibilidad para esa fecha antes de agendar tu cita.` 
       });
     }
 
@@ -1624,12 +1698,32 @@ const swaggerDocument = {
                       }
                     },
                     {
-                      title: 'Error de Validación',
+                      title: 'Error de Validación Campos',
                       type: 'object', 
                       properties: {
                         respuesta: { 
                           type: 'string',
                           example: '⚠️ Error: Faltan o son inválidos los siguientes datos obligatorios:\n\n❌ clientEmail\n❌ clientPhone\n\nEl bot debe recopilar TODOS los datos antes de enviar la solicitud.'
+                        }
+                      }
+                    },
+                    {
+                      title: 'Error Fecha Pasada',
+                      type: 'object',
+                      properties: {
+                        respuesta: { 
+                          type: 'string',
+                          example: '❌ No puedes agendar citas para fechas pasadas.\n\n🔍 Para agendar una cita, primero consulta la disponibilidad para hoy o fechas futuras.'
+                        }
+                      }
+                    },
+                    {
+                      title: 'Error Menos de 2 Horas',
+                      type: 'object',
+                      properties: {
+                        respuesta: { 
+                          type: 'string',
+                          example: '🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las 2:00 PM de hoy.\n\n📅 El siguiente día hábil es: Mañana (2025-08-28)\n\n🔍 Te recomiendo consultar la disponibilidad para esa fecha antes de agendar tu cita.'
                         }
                       }
                     },
