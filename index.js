@@ -314,12 +314,15 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       }));
     }
     
-    const targetDate = new Date(targetDateStr + 'T00:00:00');
-    if (isNaN(targetDate.getTime())) {
+    // Parsear fecha directamente en zona horaria de México para evitar desajustes
+    const targetMoment = moment.tz(targetDateStr, 'YYYY-MM-DD', config.timezone.default);
+    if (!targetMoment.isValid()) {
       return res.json(createJsonResponse({ 
         respuesta: '⚠️ Error: Formato de fecha inválido. Por favor, usa el formato YYYY-MM-DD.' 
       }));
     }
+    
+    const targetDate = targetMoment.toDate();
 
     // Obtener datos reales de Google Sheets
     let sheetData;
@@ -349,7 +352,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     console.log(`✅ Calendar ID: ${calendarId}, Service Duration: ${serviceDuration} min`);
     
     // 🆕 NUEVA LÓGICA DE FECHAS DINÁMICAS
-    const targetMoment = moment(targetDate).tz(config.timezone.default);
+    // targetMoment ya está declarado arriba con el parseo correcto
     const today = moment().tz(config.timezone.default);
     const tomorrow = today.clone().add(1, 'day');
     const dayAfterTomorrow = today.clone().add(2, 'days');
