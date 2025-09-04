@@ -348,33 +348,92 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
 
     console.log(`✅ Calendar ID: ${calendarId}, Service Duration: ${serviceDuration} min`);
     
-    // 🆕 CALCULAR 3 DÍAS: ANTERIOR, SOLICITADO, SIGUIENTE (usando zona horaria correcta)
+    // 🆕 NUEVA LÓGICA DE FECHAS DINÁMICAS
     const targetMoment = moment(targetDate).tz(config.timezone.default);
-    const previousDate = targetMoment.clone().subtract(1, 'day').toDate();
-    const nextDate = targetMoment.clone().add(1, 'day').toDate();
-    
     const today = moment().tz(config.timezone.default);
-    const todayStr = today.format('YYYY-MM-DD');
+    const tomorrow = today.clone().add(1, 'day');
+    const dayAfterTomorrow = today.clone().add(2, 'days');
     
-    console.log(`📅 === CÁLCULO DE 3 DÍAS en ${config.timezone.default} ===`);
-    console.log(`   - Hoy (servidor): ${todayStr}`);
-    console.log(`   - Fecha objetivo: ${targetMoment.format('YYYY-MM-DD')}`);
-    console.log(`   - Fecha anterior: ${moment(previousDate).tz(config.timezone.default).format('YYYY-MM-DD')}`);
-    console.log(`   - Fecha siguiente: ${moment(nextDate).tz(config.timezone.default).format('YYYY-MM-DD')}`);
+    console.log(`📅 === NUEVA LÓGICA DE FECHAS DINÁMICAS en ${config.timezone.default} ===`);
+    console.log(`   - Hoy (servidor): ${today.format('YYYY-MM-DD')}`);
+    console.log(`   - Mañana: ${tomorrow.format('YYYY-MM-DD')}`);
+    console.log(`   - Pasado mañana: ${dayAfterTomorrow.format('YYYY-MM-DD')}`);
+    console.log(`   - Fecha solicitada: ${targetMoment.format('YYYY-MM-DD')}`);
+    
+    let datesToCheck = [];
+    
+    // Determinar qué fechas consultar según la lógica nueva
+    if (targetMoment.isSame(today, 'day')) {
+      // Si piden horarios de HOY
+      console.log(`🔍 Fecha solicitada es HOY - Verificando horario laboral actual`);
+      
+      // Obtener horarios de trabajo para hoy
+      const todayJs = today.toDate().getDay();
+      const todaySheetDay = (todayJs === 0) ? 7 : todayJs;
+      const todayWorkingHours = findWorkingHours(calendarNumber, todaySheetDay, sheetData.hours);
+      
+      console.log(`   - Día de la semana: ${todayJs} (Sheet: ${todaySheetDay})`);
+      console.log(`   - Horario de trabajo hoy: ${todayWorkingHours ? todayWorkingHours.start + ':00 - ' + todayWorkingHours.end + ':00' : 'No definido'}`);
+      
+      // Verificar si aún estamos dentro del horario laboral
+      const currentHour = today.hour();
+      const isWorkingDay = todayWorkingHours !== null;
+      const isWithinWorkingHours = isWorkingDay && currentHour < todayWorkingHours.end - 1; // -1 porque necesitamos al menos 1 hora
+      
+      console.log(`   - Hora actual: ${currentHour}:${today.minute().toString().padStart(2, '0')}`);
+      console.log(`   - Es día laboral: ${isWorkingDay}`);
+      console.log(`   - Dentro de horario laboral: ${isWithinWorkingHours}`);
+      
+      if (!isWorkingDay) {
+        // Si hoy no es día laboral (domingo), mostrar mensaje especial
+        return res.json(createJsonResponse({ 
+          respuesta: '🚫 Hoy no hay servicio. Puedes agendar para mañana en adelante.' 
+        }));
+      }
+      
+      if (!isWithinWorkingHours) {
+        // Si ya estamos fuera del horario laboral de hoy
+        console.log(`⏰ Fuera del horario laboral - Solo mostrar días siguientes`);
+        return res.json(createJsonResponse({ 
+          respuesta: `⏰ Ya no es posible agendar para hoy (horario laboral hasta las ${todayWorkingHours.end}:00).\n\nPuedes agendar para mañana en adelante. ¿Te gustaría consultar disponibilidad para mañana?` 
+        }));
+      }
+      
+      // Si aún estamos dentro del horario laboral, mostrar HOY + MAÑANA + PASADO MAÑANA
+      console.log(`✅ Dentro del horario laboral - Mostrando: hoy + mañana + pasado mañana`);
+      datesToCheck = [
+        { date: today.toDate(), label: 'hoy', emoji: '⚡', priority: 1 },
+        { date: tomorrow.toDate(), label: 'mañana', emoji: '📅', priority: 2 },
+        { date: dayAfterTomorrow.toDate(), label: 'pasado mañana', emoji: '📅', priority: 3 }
+      ];
+      
+    } else if (targetMoment.isSame(tomorrow, 'day')) {
+      // Si piden horarios de MAÑANA, también mostrar PASADO MAÑANA
+      console.log(`🔍 Fecha solicitada es MAÑANA - Mostrando: mañana + pasado mañana`);
+      datesToCheck = [
+        { date: tomorrow.toDate(), label: 'mañana', emoji: '📅', priority: 1 },
+        { date: dayAfterTomorrow.toDate(), label: 'pasado mañana', emoji: '📅', priority: 2 }
+      ];
+    } else {
+      // Si es cualquier otra fecha (ayer, fecha lejana), solo mostrar ESE DÍA ESPECÍFICO
+      console.log(`🔍 Fecha solicitada es otra fecha - Mostrando solo: fecha específica`);
+      datesToCheck = [
+        { date: targetDate, label: 'solicitado', emoji: '📅', priority: 1 }
+      ];
+    }
+    
+    console.log(`📊 Fechas a evaluar: ${datesToCheck.length}`);
+    datesToCheck.forEach(dateInfo => {
+      console.log(`   - ${dateInfo.label}: ${moment(dateInfo.date).tz(config.timezone.default).format('YYYY-MM-DD')}`);
+    });
     
     const daysWithSlots = [];
-    
-    const datesToCheck = [
-      { date: previousDate, label: 'anterior', emoji: '⚡', priority: 1 },
-      { date: targetDate, label: 'solicitado', emoji: '📅', priority: 2 },
-      { date: nextDate, label: 'siguiente', emoji: '📅', priority: 3 }
-    ];
     
     for (const dayInfo of datesToCheck) {
       const dayMoment = moment(dayInfo.date).tz(config.timezone.default);
       const dateStr = dayMoment.format('YYYY-MM-DD');
       
-      console.log(`🔍 Evaluando día ${dayInfo.label}: ${dateStr} (hoy: ${todayStr})`);
+      console.log(`🔍 Evaluando día ${dayInfo.label}: ${dateStr} (hoy: ${today.format('YYYY-MM-DD')})`);
       
       // Solo procesar días que no sean en el pasado
       if (dayMoment.isSameOrAfter(today, 'day')) {
