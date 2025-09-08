@@ -9,7 +9,7 @@ const swaggerUi = require('swagger-ui-express');
 // Importar configuración y servicios
 const config = require('./config');
 const { initializeAuth, getCalendarInstance } = require('./services/googleAuth');
-const { getSheetData, findData, findWorkingHours, updateClientStatus, getClientDataByReservationCode, saveClientDataOriginal, ensureClientsSheet } = require('./services/googleSheets');
+const { getSheetData, findData, findWorkingHours, updateClientStatus, getClientDataByReservationCode, saveClientDataOriginal, ensureClientsSheet, consultaDatosPacientePorTelefono } = require('./services/googleSheets');
 const { findAvailableSlots, cancelEventByReservationCodeOriginal, createEventOriginal, formatTimeTo12Hour } = require('./services/googleCalendar');
 const { sendAppointmentConfirmation, sendNewAppointmentNotification, emailServiceReady } = require('./services/emailService');
 
@@ -334,7 +334,8 @@ app.get('/', (req, res) => {
       consulta_disponibilidad: `GET ${serverUrl}/api/consulta-disponibilidad`,
       agenda_cita: `POST ${serverUrl}/api/agenda-cita`,
       cancela_cita: `POST ${serverUrl}/api/cancela-cita`,
-      consulta_fecha: `GET ${serverUrl}/api/consulta-fecha-actual`
+      consulta_fecha: `GET ${serverUrl}/api/consulta-fecha-actual`,
+      consulta_datos_paciente: `GET ${serverUrl}/api/consulta-datos-paciente`
     },
     status: 'operational'
   });
@@ -1534,6 +1535,111 @@ app.post('/api/debug-sheets', async (req, res) => {
   }
 });
 
+/**
+ * ENDPOINT: Consultar datos de paciente por número telefónico
+ * Busca información del paciente en Google Sheets usando el número de teléfono
+ */
+app.get('/api/consulta-datos-paciente', async (req, res) => {
+  try {
+    console.log('🔍 === CONSULTA DATOS PACIENTE ===');
+    const { telefono } = req.query;
+
+    console.log('Parámetros recibidos:', { telefono });
+
+    // Validación de parámetros
+    if (!telefono) {
+      return res.json({
+        success: false,
+        message: '⚠️ Error: Se requiere el parámetro "telefono" para realizar la búsqueda.',
+        data: []
+      });
+    }
+
+    // Validación básica del formato de teléfono
+    const telefonoLimpio = telefono.replace(/[\s\-\(\)\.]/g, '');
+    if (telefonoLimpio.length < 8) {
+      return res.json({
+        success: false,
+        message: '⚠️ Error: El número de teléfono debe tener al menos 8 dígitos.',
+        data: []
+      });
+    }
+
+    console.log(`🔍 Buscando paciente con teléfono: ${telefono}`);
+    console.log(`📞 Teléfono normalizado: ${telefonoLimpio}`);
+
+    // Buscar datos del paciente en Google Sheets
+    let pacientesEncontrados;
+    try {
+      pacientesEncontrados = await consultaDatosPacientePorTelefono(telefono);
+    } catch (error) {
+      console.error('❌ Error consultando Google Sheets:', error.message);
+      return res.json({
+        success: false,
+        message: '❌ Error interno: No se pudieron consultar los datos. Verifique la configuración de Google Sheets.',
+        data: []
+      });
+    }
+
+    // Si no se encontraron pacientes
+    if (!pacientesEncontrados || pacientesEncontrados.length === 0) {
+      console.log(`❌ No se encontraron pacientes con el teléfono: ${telefono}`);
+      return res.json({
+        success: false,
+        message: `❌ No se encontraron registros para el número de teléfono: ${telefono}`,
+        data: []
+      });
+    }
+
+    // Formatear datos de respuesta - solo nombre completo y correo electrónico
+    const datosFormateados = pacientesEncontrados.map(paciente => {
+      const nombreCompleto = paciente.nombreCompleto || '';
+      const correoElectronico = paciente.correoElectronico || '';
+      
+      return {
+        nombreCompleto: nombreCompleto,
+        correoElectronico: correoElectronico,
+        telefono: paciente.telefono,
+        fechaUltimaRegistro: paciente.fechaRegistro
+      };
+    });
+
+    // Filtrar solo registros que tengan al menos nombre o correo
+    const datosValidos = datosFormateados.filter(paciente => 
+      paciente.nombreCompleto.trim() !== '' || paciente.correoElectronico.trim() !== ''
+    );
+
+    if (datosValidos.length === 0) {
+      return res.json({
+        success: false,
+        message: `⚠️ Se encontraron registros para el teléfono ${telefono}, pero no contienen nombre completo ni correo electrónico.`,
+        data: []
+      });
+    }
+
+    console.log(`✅ Pacientes encontrados: ${datosValidos.length}`);
+    datosValidos.forEach((paciente, index) => {
+      console.log(`   ${index + 1}. ${paciente.nombreCompleto} - ${paciente.correoElectronico}`);
+    });
+
+    // Respuesta exitosa
+    return res.json({
+      success: true,
+      message: `✅ Se ${datosValidos.length === 1 ? 'encontró' : 'encontraron'} ${datosValidos.length} ${datosValidos.length === 1 ? 'registro' : 'registros'} para el teléfono ${telefono}`,
+      data: datosValidos,
+      totalRegistros: datosValidos.length
+    });
+
+  } catch (error) {
+    console.error('💥 Error en consulta de datos del paciente:', error.message);
+    return res.json({
+      success: false,
+      message: '🤖 Ha ocurrido un error inesperado al consultar los datos del paciente.',
+      data: []
+    });
+  }
+});
+
 // =================================================================
 // 📚 DOCUMENTACIÓN SWAGGER
 // =================================================================
@@ -1977,6 +2083,50 @@ const swaggerDocument = {
           }
         }
       }
+    },
+    '/api/consulta-datos-paciente': {
+      get: {
+        summary: 'Consultar datos de paciente por número telefónico',
+        description: 'Busca información del paciente en Google Sheets usando el número de teléfono',
+        parameters: [
+          {
+            name: 'telefono',
+            in: 'query',
+            required: true,
+            description: 'Número de teléfono del paciente',
+            schema: { type: 'string', example: '5551234567' }
+          }
+        ],
+        responses: {
+          '200': {
+            description: 'Respuesta exitosa con datos del paciente',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Datos del paciente encontrados exitosamente' },
+                    data: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          nombreCompleto: { type: 'string', example: 'Juan Pérez' },
+                          correoElectronico: { type: 'string', example: 'juan.perez@ejemplo.com' },
+                          telefono: { type: 'string', example: '5551234567' },
+                          fechaUltimaRegistro: { type: 'string', example: '2025-12-01' }
+                        }
+                      }
+                    },
+                    totalRegistros: { type: 'integer', example: 1 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 };
@@ -2021,6 +2171,7 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/debug-agenda`);
   console.log(`   POST ${serverUrl}/api/debug-sheets`);
   console.log(`   POST ${serverUrl}/api/test-email`);
+  console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
   console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
   console.log(`   - Google Sheet ID: ${config.business.sheetId}`);

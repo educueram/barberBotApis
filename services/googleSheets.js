@@ -330,6 +330,134 @@ async function getClientDataByReservationCode(codigoReserva) {
   }
 }
 
+/**
+ * Consultar datos de paciente por número telefónico
+ * Busca en la hoja CLIENTES y devuelve registros que coincidan con el número
+ * Si hay duplicados, prioriza el que tenga nombre completo
+ */
+async function consultaDatosPacientePorTelefono(numeroTelefono) {
+  try {
+    console.log(`🔍 Buscando paciente con teléfono: ${numeroTelefono}`);
+    
+    const sheets = await getSheetsInstance();
+    
+    // Obtener todos los datos de la hoja CLIENTES
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: config.business.sheetId,
+      range: config.sheets.clients
+    });
+
+    const data = response.data.values || [];
+    
+    if (data.length <= 1) {
+      console.log('⚠️ No hay datos en la hoja CLIENTES o solo headers');
+      return [];
+    }
+
+    // Normalizar el número de búsqueda (quitar espacios, guiones, etc.)
+    const normalizedSearchPhone = numeroTelefono.replace(/[\s\-\(\)\.]/g, '');
+    console.log(`📞 Teléfono normalizado para búsqueda: ${normalizedSearchPhone}`);
+    
+    const pacientesEncontrados = [];
+    
+    // Buscar coincidencias en la columna de teléfono (índice 3)
+    for (let i = 1; i < data.length; i++) {
+      const rowPhone = data[i][3] || '';
+      const normalizedRowPhone = rowPhone.toString().replace(/[\s\-\(\)\.]/g, '');
+      
+      // Verificar si el número coincide (búsqueda exacta o si uno contiene al otro)
+      if (normalizedRowPhone && 
+          (normalizedRowPhone === normalizedSearchPhone || 
+           normalizedRowPhone.includes(normalizedSearchPhone) ||
+           normalizedSearchPhone.includes(normalizedRowPhone))) {
+        
+        const pacienteData = {
+          fechaRegistro: data[i][0] || '',
+          codigoReserva: data[i][1] || '',
+          nombreCompleto: data[i][2] || '',
+          telefono: data[i][3] || '',
+          correoElectronico: data[i][4] || '',
+          profesionalName: data[i][5] || '',
+          fechaCita: data[i][6] || '',
+          horaCita: data[i][7] || '',
+          servicio: data[i][8] || '',
+          estado: data[i][9] || ''
+        };
+        
+        pacientesEncontrados.push(pacienteData);
+        console.log(`✅ Paciente encontrado: ${pacienteData.nombreCompleto} - ${pacienteData.correoElectronico}`);
+      }
+    }
+
+    if (pacientesEncontrados.length === 0) {
+      console.log(`❌ No se encontraron pacientes con el teléfono: ${numeroTelefono}`);
+      return [];
+    }
+
+    // Si hay múltiples registros, aplicar lógica de deduplicación
+    if (pacientesEncontrados.length > 1) {
+      console.log(`📊 Se encontraron ${pacientesEncontrados.length} registros, aplicando deduplicación...`);
+      
+      // Agrupar por teléfono exacto
+      const grupos = {};
+      pacientesEncontrados.forEach(paciente => {
+        const telNormalizado = paciente.telefono.replace(/[\s\-\(\)\.]/g, '');
+        if (!grupos[telNormalizado]) {
+          grupos[telNormalizado] = [];
+        }
+        grupos[telNormalizado].push(paciente);
+      });
+      
+      const pacientesDeduplicados = [];
+      
+      // Para cada grupo de teléfono, seleccionar el mejor registro
+      Object.keys(grupos).forEach(telefono => {
+        const grupo = grupos[telefono];
+        
+        if (grupo.length === 1) {
+          pacientesDeduplicados.push(grupo[0]);
+        } else {
+          // Priorizar el que tenga nombre completo más detallado
+          const conNombreCompleto = grupo.filter(p => 
+            p.nombreCompleto && 
+            p.nombreCompleto.trim().length > 0 && 
+            p.nombreCompleto.trim().split(' ').length >= 2
+          );
+          
+          if (conNombreCompleto.length > 0) {
+            // Ordenar por fecha de registro más reciente
+            conNombreCompleto.sort((a, b) => {
+              const fechaA = new Date(a.fechaRegistro);
+              const fechaB = new Date(b.fechaRegistro);
+              return fechaB - fechaA;
+            });
+            pacientesDeduplicados.push(conNombreCompleto[0]);
+            console.log(`🔄 Deduplicación: Seleccionado ${conNombreCompleto[0].nombreCompleto} (nombre más completo)`);
+          } else {
+            // Si ninguno tiene nombre completo, tomar el más reciente
+            grupo.sort((a, b) => {
+              const fechaA = new Date(a.fechaRegistro);
+              const fechaB = new Date(b.fechaRegistro);
+              return fechaB - fechaA;
+            });
+            pacientesDeduplicados.push(grupo[0]);
+            console.log(`🔄 Deduplicación: Seleccionado registro más reciente`);
+          }
+        }
+      });
+      
+      return pacientesDeduplicados;
+    }
+
+    console.log(`✅ Total de pacientes únicos encontrados: ${pacientesEncontrados.length}`);
+    return pacientesEncontrados;
+
+  } catch (error) {
+    console.error('❌ Error consultando datos del paciente:', error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   getSheetData,
   getSheetValues,
@@ -338,5 +466,6 @@ module.exports = {
   saveClientDataOriginal,
   updateClientStatus,
   ensureClientsSheet,
-  getClientDataByReservationCode
+  getClientDataByReservationCode,
+  consultaDatosPacientePorTelefono
 }; 
