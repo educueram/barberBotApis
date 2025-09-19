@@ -568,7 +568,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     daysWithSlots.sort((a, b) => a.priority - b.priority);
     
     //let responseText = `🔥 ¡${daysWithSlots.length} ${daysWithSlots.length === 1 ? 'día' : 'días'} con disponibilidad encontrada!\n\n`;
-    let responseText;
+    let responseText = '';
 
     const totalSlotsAvailable = daysWithSlots.reduce((sum, day) => sum + day.stats.availableSlots, 0);
     const avgOccupation = Math.round(daysWithSlots.reduce((sum, day) => sum + day.stats.occupationPercentage, 0) / daysWithSlots.length);
