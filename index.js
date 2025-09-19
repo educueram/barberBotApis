@@ -583,7 +583,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       const occupationEmoji = getOccupationEmoji(dayData.stats.occupationPercentage);
       const urgencyText = getUrgencyText(dayData.stats.occupationPercentage);
       
-      responseText += `${dayData.emoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
+      responseText += `${dayData.emoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n\n`;
       
       const formattedSlots = dayData.slots.map((slot) => {
         const letterEmoji = getLetterEmoji(letterIndex);
