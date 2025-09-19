@@ -568,7 +568,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     daysWithSlots.sort((a, b) => a.priority - b.priority);
     
     //let responseText = `🔥 ¡${daysWithSlots.length} ${daysWithSlots.length === 1 ? 'día' : 'días'} con disponibilidad encontrada!\n\n`;
-    let responseText = null;
+    let responseText;
 
     const totalSlotsAvailable = daysWithSlots.reduce((sum, day) => sum + day.stats.availableSlots, 0);
     const avgOccupation = Math.round(daysWithSlots.reduce((sum, day) => sum + day.stats.occupationPercentage, 0) / daysWithSlots.length);
@@ -606,6 +606,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     const hasHighDemandDay = daysWithSlots.some(day => day.stats.occupationPercentage >= 70);
     const hasLowDemandDay = daysWithSlots.some(day => day.stats.occupationPercentage <= 30);
     
+    /*
     if (hasEarlierDay) {
       responseText += `⚡ *¡Oportunidad!* Hay espacios anteriores disponibles - ¡agenda antes! 💰\n`;
     }
@@ -617,6 +618,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     if (hasLowDemandDay) {
       responseText += `✨ *¡Perfecto!* Algunos días tienen excelente disponibilidad\n`;
     }
+      */
     
     responseText += `\n💡 Escribe la letra del horario que prefieras (A, B, C...) ✨`;
     
