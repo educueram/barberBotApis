@@ -567,12 +567,13 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     
     daysWithSlots.sort((a, b) => a.priority - b.priority);
     
-    let responseText = `🔥 ¡${daysWithSlots.length} ${daysWithSlots.length === 1 ? 'día' : 'días'} con disponibilidad encontrada!\n\n`;
-    
+    //let responseText = `🔥 ¡${daysWithSlots.length} ${daysWithSlots.length === 1 ? 'día' : 'días'} con disponibilidad encontrada!\n\n`;
+    let responseText = null;
+
     const totalSlotsAvailable = daysWithSlots.reduce((sum, day) => sum + day.stats.availableSlots, 0);
     const avgOccupation = Math.round(daysWithSlots.reduce((sum, day) => sum + day.stats.occupationPercentage, 0) / daysWithSlots.length);
     
-    responseText += `📊 *Resumen:* ${totalSlotsAvailable} horarios disponibles • ${avgOccupation}% ocupación promedio\n\n`;
+    //responseText += `📊 *Resumen:* ${totalSlotsAvailable} horarios disponibles • ${avgOccupation}% ocupación promedio\n\n`;
     
     let letterIndex = 0;
     let dateMapping = {};
@@ -583,7 +584,6 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       const urgencyText = getUrgencyText(dayData.stats.occupationPercentage);
       
       responseText += `${dayData.emoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
-      responseText += `${occupationEmoji} ${dayData.stats.availableSlots}/${dayData.stats.totalSlots} disponibles • ${dayData.stats.occupationPercentage}% ocupado ${urgencyText}\n\n`;
       
       const formattedSlots = dayData.slots.map((slot) => {
         const letterEmoji = getLetterEmoji(letterIndex);
