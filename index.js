@@ -412,7 +412,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     // Determinar qué fechas consultar según la lógica nueva
     if (targetMoment.isSame(today, 'day')) {
       // Si piden horarios de HOY
-      console.log(`🔍 Fecha solicitada es HOY - Verificando horario laboral actual`);
+      console.log(`🔍 Fecha solicitada es HOY - Verificando disponibilidad real`);
       
       // Obtener horarios de trabajo para hoy
       const todayJs = today.toDate().getDay();
@@ -422,32 +422,16 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       console.log(`   - Día de la semana: ${todayJs} (Sheet: ${todaySheetDay})`);
       console.log(`   - Horario de trabajo hoy: ${todayWorkingHours ? todayWorkingHours.start + ':00 - ' + todayWorkingHours.end + ':00' : 'No definido'}`);
       
-      // Verificar si aún estamos dentro del horario laboral
-      const currentHour = today.hour();
-      const isWorkingDay = todayWorkingHours !== null;
-      const isWithinWorkingHours = isWorkingDay && currentHour < todayWorkingHours.end - 1; // -1 porque necesitamos al menos 1 hora
-      
-      console.log(`   - Hora actual: ${currentHour}:${today.minute().toString().padStart(2, '0')}`);
-      console.log(`   - Es día laboral: ${isWorkingDay}`);
-      console.log(`   - Dentro de horario laboral: ${isWithinWorkingHours}`);
-      
-      if (!isWorkingDay) {
+      if (!todayWorkingHours) {
         // Si hoy no es día laboral (domingo), mostrar mensaje especial
         return res.json(createJsonResponse({ 
           respuesta: '🚫 Hoy no hay servicio. Puedes agendar para mañana en adelante.' 
         }));
       }
       
-      if (!isWithinWorkingHours) {
-        // Si ya estamos fuera del horario laboral de hoy
-        console.log(`⏰ Fuera del horario laboral - Solo mostrar días siguientes`);
-        return res.json(createJsonResponse({ 
-          respuesta: `⏰ Ya no es posible agendar para hoy (horario laboral hasta las ${todayWorkingHours.end}:00).\n\nPuedes agendar para mañana en adelante. ¿Te gustaría consultar disponibilidad para mañana?` 
-        }));
-      }
-      
-      // Si aún estamos dentro del horario laboral, mostrar HOY + MAÑANA + PASADO MAÑANA
-      console.log(`✅ Dentro del horario laboral - Mostrando: hoy + mañana + pasado mañana`);
+      // En lugar de validar prematuramente, siempre intentar mostrar HOY + MAÑANA + PASADO MAÑANA
+      // La validación real de disponibilidad se hará al generar los slots
+      console.log(`✅ Verificando disponibilidad real - Incluyendo: hoy + mañana + pasado mañana`);
       datesToCheck = [
         { date: today.toDate(), label: 'hoy', emoji: '⚡', priority: 1 },
         { date: tomorrow.toDate(), label: 'mañana', emoji: '📅', priority: 2 },
