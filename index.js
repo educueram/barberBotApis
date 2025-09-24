@@ -238,13 +238,13 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
     lunchStart: config.workingHours.lunchStartHour,
     lunchEnd: config.workingHours.lunchEndHour,
     hasLunch: true
-  } : {
-    start: hours?.start || 9,
-    end: hours?.end || 19,
-    lunchStart: 14,  // 2 PM fijo
-    lunchEnd: 15,    // 3 PM fijo
-    hasLunch: true
-  };
+      } : {
+      start: hours?.start || 10,
+      end: hours?.end || 19,
+      lunchStart: 14,  // 2 PM fijo
+      lunchEnd: 15,    // 3 PM fijo
+      hasLunch: true
+    };
   
   console.log(`⚙️ Mock - Horarios de trabajo (${dayNames[dayOfWeek]}):`);
   console.log(`   - Inicio: ${workingHours.start}:00`);
@@ -264,7 +264,7 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
 function mockGenerateSlotsForDay(dateMoment, workingHours) {
   const availableSlots = [];
   const now = moment().tz(config.timezone.default);
-  const minimumBookingTime = now.clone().add(2, 'hours');
+  const minimumBookingTime = now.clone().add(1, 'hours');
   const isToday = dateMoment.isSame(now, 'day');
   
   console.log(`📅 Mock - Generando slots para ${dateMoment.format('YYYY-MM-DD')}`);
@@ -425,7 +425,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       // Verificar si aún estamos dentro del horario laboral
       const currentHour = today.hour();
       const isWorkingDay = todayWorkingHours !== null;
-      const isWithinWorkingHours = isWorkingDay && currentHour < todayWorkingHours.end - 2; // -2 porque necesitamos al menos 2 horas
+      const isWithinWorkingHours = isWorkingDay && currentHour < todayWorkingHours.end - 1; // -1 porque necesitamos al menos 1 hora
       
       console.log(`   - Hora actual: ${currentHour}:${today.minute().toString().padStart(2, '0')}`);
       console.log(`   - Es día laboral: ${isWorkingDay}`);
@@ -1030,7 +1030,7 @@ app.post('/api/agenda-cita', async (req, res) => {
     // PASO 2: VALIDACIÓN DE FECHA Y TIEMPO (mejorada)
     const now = moment().tz(config.timezone.default);
     const startTime = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', config.timezone.default);
-    const minimumBookingTime = moment(now).add(2, 'hours');
+    const minimumBookingTime = moment(now).add(1, 'hours');
 
     console.log('=== VALIDACIÓN DE FECHA Y TIEMPO (ZONA HORARIA MÉXICO) ===');
     console.log('now:', now.format('YYYY-MM-DD HH:mm:ss z'));
@@ -1080,9 +1080,9 @@ app.post('/api/agenda-cita', async (req, res) => {
       const nextWorkingDayName = formatDateToSpanishPremium(nextWorkingDay.toDate());
       const nextWorkingDateStr = nextWorkingDay.format('YYYY-MM-DD');
       
-      return res.json({ 
-        respuesta: `🤚 Debes agendar con al menos dos horas de anticipación. No puedes reservar para las ${time12h} de hoy.\n\n📅 El siguiente día hábil es: ${nextWorkingDayName} (${nextWorkingDateStr})\n\n🔍 Te recomiendo consultar la disponibilidad para esa fecha antes de agendar tu cita.` 
-      });
+              return res.json({ 
+          respuesta: `🤚 Debes agendar con al menos una hora de anticipación. No puedes reservar para las ${time12h} de hoy.\n\n📅 El siguiente día hábil es: ${nextWorkingDayName} (${nextWorkingDateStr})\n\n🔍 Te recomiendo consultar la disponibilidad para esa fecha antes de agendar tu cita.` 
+        });
     }
 
     // PASO 3: OBTENER CONFIGURACIÓN (lógica original)

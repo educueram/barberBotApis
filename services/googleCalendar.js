@@ -77,7 +77,7 @@ async function findAvailableSlots(calendarId, date, durationMinutes, hours) {
       lunchEnd: config.workingHours.lunchEndHour,
       hasLunch: true
     } : {
-      start: hours?.start || 9,
+      start: hours?.start || 10,
       end: hours?.end || 19,
       lunchStart: 14,  // 2 PM fijo
       lunchEnd: 15,    // 3 PM fijo
@@ -130,7 +130,7 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
     }
     
     const now = moment().tz(config.timezone.default);
-    const minimumBookingTime = now.clone().add(2, 'hours');
+    const minimumBookingTime = now.clone().add(1, 'hours');
     
     const isToday = dateMoment.isSame(now, 'day');
 

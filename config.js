@@ -78,7 +78,7 @@ const config = {
   workingHours: {
     // Forzar horarios específicos (independiente de Google Sheets)
     forceFixedSchedule: process.env.FORCE_FIXED_SCHEDULE === 'true' || process.env.NODE_ENV === 'production',
-    startHour: parseInt(process.env.WORKING_START_HOUR) || 9,   // 9 AM
+    startHour: parseInt(process.env.WORKING_START_HOUR) || 10,   // 10 AM
     endHour: parseInt(process.env.WORKING_END_HOUR) || 19,     // 7 PM  
     lunchStartHour: parseInt(process.env.LUNCH_START_HOUR) || 14, // 2 PM
     lunchEndHour: parseInt(process.env.LUNCH_END_HOUR) || 15,     // 3 PM
@@ -97,7 +97,7 @@ const config = {
   },
 
   validation: {
-    minBookingHours: 2, // Mínimo 2 horas de anticipación
+    minBookingHours: 1, // Mínimo 1 hora de anticipación
     maxDaysAhead: 90,   // Máximo 90 días en el futuro
     emailRegex: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
     phoneMinLength: 10
