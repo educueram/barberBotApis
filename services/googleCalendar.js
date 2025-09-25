@@ -151,11 +151,20 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
     const events = response.data.items || [];
     console.log(`   - Eventos encontrados: ${events.length}`);
 
+    // 🔍 LOGGING DETALLADO: Mostrar todos los eventos encontrados
+    events.forEach((event, index) => {
+      const eventStart = moment(event.start.dateTime || event.start.date).tz(config.timezone.default);
+      const eventEnd = moment(event.end.dateTime || event.end.date).tz(config.timezone.default);
+      console.log(`   📅 Evento ${index + 1}: "${event.summary}"`);
+      console.log(`      - Inicio: ${eventStart.format('YYYY-MM-DD HH:mm:ss z')}`);
+      console.log(`      - Fin: ${eventEnd.format('YYYY-MM-DD HH:mm:ss z')}`);
+    });
+
     // Agregar el horario de comida como un evento bloqueado (si aplica)
     const busySlots = events.map(event => ({
       start: moment(event.start.dateTime || event.start.date).tz(config.timezone.default),
       end: moment(event.end.dateTime || event.end.date).tz(config.timezone.default),
-      type: 'appointment'
+      type: `appointment: ${event.summary || 'Sin título'}`
     }));
 
     // Agregar horario de comida como slot bloqueado (solo si existe)
@@ -184,54 +193,78 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
       return hour < workingHours.start || hour >= workingHours.end;
     };
 
-    // Generar slots disponibles
+    // 🆕 NUEVA LÓGICA: Generar slots hora por hora y verificar disponibilidad individualmente
     const availableSlots = [];
-    let currentTime = startOfDay.clone();
-
-    // Procesar gaps entre eventos
-    busySlots.forEach(slot => {
-      const gapEnd = slot.start.clone();
+    
+    // Función auxiliar para verificar si un slot específico está ocupado
+    const isSlotOccupied = (slotTime) => {
+      const slotEnd = slotTime.clone().add(1, 'hour');
       
-      // Generar slots en el gap (slots de 1 hora)
-      while (currentTime.clone().add(1, 'hour').isSameOrBefore(gapEnd)) {
-        // Verificar que no esté en horario de comida ni fuera de horario laboral
-        if (!isOutsideWorkingHours(currentTime) && 
-            !isLunchTime(currentTime) &&
-            (!isToday || currentTime.isSameOrAfter(minimumBookingTime))) {
-          
-          const timeSlot = currentTime.format('HH:mm');
-          availableSlots.push(timeSlot);
-          console.log(`   ✅ Slot agregado: ${timeSlot}`);
-        } else {
-          const reason = isOutsideWorkingHours(currentTime) ? 'fuera de horario' :
-                        isLunchTime(currentTime) ? 'horario de comida' : 'muy pronto';
-          console.log(`   ❌ Slot rechazado ${currentTime.format('HH:mm')}: ${reason}`);
-        }
-        currentTime.add(1, 'hour'); // Incrementar de hora en hora (60 minutos)
+      // 🔍 LOGGING DETALLADO para slots específicos (11 AM y 12 PM)
+      const hour = slotTime.hour();
+      if (hour === 11 || hour === 12) {
+        console.log(`   🔍 ANÁLISIS DETALLADO SLOT ${slotTime.format('HH:mm')}:`);
+        console.log(`      - Slot va de ${slotTime.format('HH:mm')} a ${slotEnd.format('HH:mm')}`);
+        console.log(`      - Evaluando contra ${busySlots.length} eventos ocupados:`);
       }
       
-      // Mover al final del evento ocupado
-      if (slot.end.isAfter(currentTime)) {
-        currentTime = slot.end.clone();
-      }
-    });
-
-    // Generar slots después del último evento hasta el final del día (slots de 1 hora)
-    while (currentTime.clone().add(1, 'hour').isSameOrBefore(endOfDay)) {
-      // Verificar que no esté en horario de comida ni fuera de horario laboral
-      if (!isOutsideWorkingHours(currentTime) && 
-          !isLunchTime(currentTime) &&
-          (!isToday || currentTime.isSameOrAfter(minimumBookingTime))) {
+      for (const busySlot of busySlots) {
+        const hasOverlap = slotTime.isBefore(busySlot.end) && slotEnd.isAfter(busySlot.start);
         
-        const timeSlot = currentTime.format('HH:mm');
-        availableSlots.push(timeSlot);
-        console.log(`   ✅ Slot final agregado: ${timeSlot}`);
-      } else {
-        const reason = isOutsideWorkingHours(currentTime) ? 'fuera de horario' :
-                      isLunchTime(currentTime) ? 'horario de comida' : 'muy pronto';
-        console.log(`   ❌ Slot final rechazado ${currentTime.format('HH:mm')}: ${reason}`);
+        if (hour === 11 || hour === 12) {
+          console.log(`        📅 ${busySlot.type}:`);
+          console.log(`           - Evento: ${busySlot.start.format('HH:mm')} a ${busySlot.end.format('HH:mm')}`);
+          console.log(`           - ¿Solapamiento? ${hasOverlap}`);
+          if (hasOverlap) {
+            console.log(`           - ✅ CONFLICTO DETECTADO`);
+          }
+        }
+        
+        // Verificar si hay solapamiento entre el slot propuesto y el evento ocupado
+        if (hasOverlap) {
+          console.log(`   🔒 Slot ${slotTime.format('HH:mm')} ocupado por: ${busySlot.type}`);
+          return true;
+        }
       }
-      currentTime.add(1, 'hour'); // Incrementar de hora en hora (60 minutos)
+      
+      if (hour === 11 || hour === 12) {
+        console.log(`      ✅ RESULTADO: Slot ${slotTime.format('HH:mm')} NO tiene conflictos`);
+      }
+      
+      return false;
+    };
+
+    // Generar slots de hora en hora desde el inicio hasta el fin del día laboral
+    for (let hour = workingHours.start; hour < workingHours.end; hour++) {
+      const slotTime = dateMoment.clone().hour(hour).minute(0).second(0);
+      
+      console.log(`   🔍 Evaluando slot: ${slotTime.format('HH:mm')}`);
+      
+      // Verificar restricciones básicas
+      if (isOutsideWorkingHours(slotTime)) {
+        console.log(`   ❌ Slot ${slotTime.format('HH:mm')} rechazado: fuera de horario laboral`);
+        continue;
+      }
+      
+      if (isLunchTime(slotTime)) {
+        console.log(`   ❌ Slot ${slotTime.format('HH:mm')} rechazado: horario de comida`);
+        continue;
+      }
+      
+      if (isToday && slotTime.isBefore(minimumBookingTime)) {
+        console.log(`   ❌ Slot ${slotTime.format('HH:mm')} rechazado: muy pronto (menos de 1 hora anticipación)`);
+        continue;
+      }
+      
+      // Verificar si el slot está ocupado por algún evento
+      if (isSlotOccupied(slotTime)) {
+        continue; // Ya se logueó dentro de la función
+      }
+      
+      // Si llegamos aquí, el slot está disponible
+      const timeSlot = slotTime.format('HH:mm');
+      availableSlots.push(timeSlot);
+      console.log(`   ✅ Slot agregado: ${timeSlot}`);
     }
 
     console.log(`   - Slots disponibles: ${availableSlots.length} (cada hora)`);
