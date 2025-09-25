@@ -15,7 +15,7 @@ TIMEZONE=America/Mexico_City
 FORCE_FIXED_SCHEDULE=true
 
 # Horarios de trabajo (Lunes a Viernes)
-WORKING_START_HOUR=9        # 9 AM
+WORKING_START_HOUR=10       # 10 AM
 WORKING_END_HOUR=19         # 7 PM
 LUNCH_START_HOUR=14         # 2 PM
 LUNCH_END_HOUR=15          # 3 PM
@@ -63,7 +63,7 @@ BUSINESS_ADDRESS="CDMX, México"
 Las siguientes variables son **ESENCIALES** para que los horarios funcionen correctamente:
 
 - `FORCE_FIXED_SCHEDULE=true` - Fuerza el uso de horarios fijos
-- `WORKING_START_HOUR=9` - Hora de inicio (9 AM)
+- `WORKING_START_HOUR=10` - Hora de inicio (10 AM)
 - `WORKING_END_HOUR=19` - Hora de fin (7 PM)  
 - `LUNCH_START_HOUR=14` - Inicio de comida (2 PM)
 - `LUNCH_END_HOUR=15` - Fin de comida (3 PM)
@@ -75,8 +75,8 @@ Después de agregar las variables:
 
 ### **Lunes a Viernes:**
 1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-05` (jueves)
-2. Verifica que los horarios sean: **9:00, 10:00, 11:00, 12:00, 13:00, 15:00, 16:00, 17:00, 18:00**
-3. NO debe aparecer: horarios antes de 9:00, después de 19:00, o entre 14:00-15:00
+2. Verifica que los horarios sean: **10:00, 11:00, 12:00, 13:00, 15:00, 16:00, 17:00, 18:00**
+3. NO debe aparecer: horarios antes de 10:00, después de 19:00, o entre 14:00-15:00
 
 ### **Sábados:**
 1. Ve a: `https://tu-app.railway.app/api/consulta-disponibilidad?calendar=1&service=1&date=2025-09-06` (sábado)

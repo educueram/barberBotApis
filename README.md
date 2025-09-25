@@ -236,8 +236,8 @@ El sistema requiere un Google Sheet con las siguientes hojas:
 #### HORARIOS
 | Calendar | Día | Hora Inicio | Hora Fin |
 |----------|-----|-------------|----------|
-| 1 | 1 | 9 | 17 |
-| 1 | 2 | 9 | 17 |
+| 1 | 1 | 10 | 19 |
+| 1 | 2 | 10 | 19 |
 
 #### CLIENTES (se crea automáticamente)
 | FECHA_REGISTRO | CODIGO_RESERVA | NOMBRE_CLIENTE | ... |
