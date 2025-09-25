@@ -9,7 +9,7 @@ const moment = require('moment-timezone');
 
 /**
  * Encontrar slots disponibles en un calendario
- * Horario: 9 AM a 7 PM, excluyendo horario de comida (2 PM a 3 PM)
+ * Horario: 10 AM a 7 PM, excluyendo horario de comida (2 PM a 3 PM)
  */
 async function findAvailableSlots(calendarId, date, durationMinutes, hours) {
   try {

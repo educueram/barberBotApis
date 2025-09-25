@@ -178,8 +178,12 @@ const developmentMockData = {
   ],
   hours: [
     ['Calendar', 'Día', 'Hora Inicio', 'Hora Fin'],
-    ['1', '1', '9', '17'],
-    ['1', '2', '9', '17'],
+    ['1', '1', '10', '19'],
+    ['1', '2', '10', '19'],
+    ['1', '3', '10', '19'],
+    ['1', '4', '10', '19'],
+    ['1', '5', '10', '19'],
+    ['1', '6', '10', '12'],
     ['2', '1', '10', '18']
   ]
 };
@@ -473,10 +477,18 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
 
         if (workingHours) {
-          console.log(`📅 Procesando día ${dayInfo.label}: ${dateStr}`);
-          console.log(`   - Horario de trabajo: ${workingHours.start}:00 - ${workingHours.end}:00`);
+          // CORRECCIÓN: Asegurar que nunca se inicie antes de las 10 AM
+          const correctedHours = {
+            start: Math.max(workingHours.start, 10), // Mínimo 10 AM
+            end: workingHours.end,
+            dayName: workingHours.dayName
+          };
           
-          const totalSlots = Math.floor((workingHours.end - workingHours.start) * 60 / parseInt(serviceDuration));
+          console.log(`📅 Procesando día ${dayInfo.label}: ${dateStr}`);
+          console.log(`   - Horario original: ${workingHours.start}:00 - ${workingHours.end}:00`);
+          console.log(`   - Horario corregido: ${correctedHours.start}:00 - ${correctedHours.end}:00`);
+          
+          const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
           
           let availableSlots = [];
           let specialMessage = null;
@@ -484,7 +496,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
           
           try {
             // Intentar usar Google Calendar API real
-            const slotResult = await findAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), workingHours);
+            const slotResult = await findAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), correctedHours);
             
             if (typeof slotResult === 'object' && slotResult.slots !== undefined) {
               // Nueva respuesta con estructura de objeto
@@ -498,7 +510,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
           } catch (error) {
             console.log(`⚠️ Error consultando calendar real, usando mock: ${error.message}`);
             // Fallback a datos simulados si falla la API real
-            const mockResult = mockFindAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), workingHours);
+            const mockResult = mockFindAvailableSlots(calendarId, dayInfo.date, parseInt(serviceDuration), correctedHours);
             
             if (typeof mockResult === 'object' && mockResult.slots !== undefined) {
               availableSlots = mockResult.slots;
