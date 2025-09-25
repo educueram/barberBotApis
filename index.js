@@ -690,12 +690,11 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
             }
           }
           
-          // Si hay un mensaje especial (domingo cerrado, sábado sin disponibilidad), retornarlo inmediatamente
+          // 🚫 DESACTIVADO: No retornar mensajes especiales inmediatamente
+          // Esto se manejará en la lógica de días alternativos si es necesario
           if (specialMessage) {
-            console.log(`⚠️ Mensaje especial para ${dayInfo.label}: ${specialMessage}`);
-            return res.json(createJsonResponse({ 
-              respuesta: specialMessage 
-            }));
+            console.log(`⚠️ Mensaje especial detectado para ${dayInfo.label}: ${specialMessage} (será manejado en lógica alternativa)`);
+            // ❌ NO retornar inmediatamente - continuar con la búsqueda
           }
           
           const occupiedSlots = totalSlots - availableSlots.length;
@@ -1771,6 +1770,107 @@ app.post('/api/debug-sheets', async (req, res) => {
   } catch (error) {
     debug.push(`💥 ERROR CRÍTICO: ${error.message}`);
     return res.json({ debug: debug.join('\n') });
+  }
+});
+
+/**
+ * ENDPOINT: Test de días alternativos
+ */
+app.get('/api/test-alternativos/:fecha', async (req, res) => {
+  try {
+    const fecha = req.params.fecha; // formato: YYYY-MM-DD
+    console.log(`🧪 === TEST DÍAS ALTERNATIVOS: ${fecha} ===`);
+    
+    // Simular la llamada principal con parámetros fijos
+    const calendarNumber = '1';
+    const serviceNumber = '1';
+    const targetDateStr = fecha;
+    
+    // Parsear fecha
+    const targetMoment = moment.tz(targetDateStr, 'YYYY-MM-DD', config.timezone.default);
+    const targetDate = targetMoment.toDate();
+    
+    // Obtener datos
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+    } catch (error) {
+      sheetData = developmentMockData;
+    }
+    
+    console.log(`🔍 Llamando directamente a findAlternativeDaysWithAvailability...`);
+    const alternativeDays = await findAlternativeDaysWithAvailability(
+      targetMoment, 
+      calendarNumber, 
+      serviceNumber, 
+      sheetData
+    );
+    
+    if (alternativeDays.length === 0) {
+      return res.json({ 
+        test: "❌ NO se encontraron días alternativos",
+        fechaConsultada: fecha,
+        resultado: "Sin alternativas"
+      });
+    }
+    
+    // Generar respuesta como lo haría el sistema real
+    const originalDayName = formatDateToSpanishPremium(targetDate);
+    let alternativeResponse = `😔 No tengo disponibilidad para *${originalDayName}* (${targetDateStr}), pero sí tengo para estos días:\n\n`;
+    
+    let letterIndex = 0;
+    let dateMapping = {};
+    
+    for (const dayData of alternativeDays) {
+      const dayName = formatDateToSpanishPremium(dayData.date);
+      const occupationEmoji = getOccupationEmoji(dayData.stats.occupationPercentage);
+      
+      let distanceText = '';
+      if (dayData.direction === 'anterior') {
+        distanceText = dayData.distance === 1 ? '📅 1 día antes' : `📅 ${dayData.distance} días antes`;
+      } else {
+        distanceText = dayData.distance === 1 ? '📅 1 día después' : `📅 ${dayData.distance} días después`;
+      }
+      
+      alternativeResponse += `${occupationEmoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
+      alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles\n\n`;
+      
+      const formattedSlots = dayData.slots.map((slot) => {
+        const letterEmoji = getLetterEmoji(letterIndex);
+        const time12h = formatTimeTo12Hour(slot);
+        
+        dateMapping[String.fromCharCode(65 + letterIndex)] = {
+          date: dayData.dateStr,
+          time: slot,
+          dayName: dayName
+        };
+        
+        letterIndex++;
+        return `${letterEmoji} ${time12h}`;
+      }).join('\n');
+      
+      alternativeResponse += formattedSlots + '\n\n';
+    }
+    
+    alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✨`;
+    
+    return res.json({
+      test: "✅ DÍAS ALTERNATIVOS ENCONTRADOS",
+      fechaConsultada: fecha,
+      diasEncontrados: alternativeDays.length,
+      respuesta: alternativeResponse,
+      metadata: {
+        originalDate: targetDateStr,
+        alternativeDaysFound: alternativeDays.length,
+        totalAlternativeSlots: alternativeDays.reduce((sum, day) => sum + day.stats.availableSlots, 0),
+        dateMapping: dateMapping,
+        isAlternativeSearch: true
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error en test alternativo:', error.message);
+    return res.json({ error: `💥 Error: ${error.message}` });
   }
 });
 
