@@ -117,6 +117,134 @@ function getUrgencyText(percentage) {
   return '¡Gran disponibilidad!';
 }
 
+// Nueva función: Buscar días alternativos con disponibilidad
+async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber, serviceNumber, sheetData, maxDaysToSearch = 7) {
+  try {
+    console.log(`🔍 === BUSCANDO DÍAS ALTERNATIVOS ===`);
+    console.log(`📅 Fecha objetivo: ${targetMoment.format('YYYY-MM-DD')}`);
+    
+    const today = moment().tz(config.timezone.default).startOf('day');
+    const alternativeDays = [];
+    const serviceDuration = findData(serviceNumber, sheetData.services, 0, 1);
+    const calendarId = findData(calendarNumber, sheetData.calendars, 0, 1);
+    
+    // Buscar hacia atrás y hacia adelante desde la fecha objetivo
+    for (let dayOffset = 1; dayOffset <= maxDaysToSearch; dayOffset++) {
+      
+      // Buscar día anterior (solo si no es en el pasado)
+      const previousDay = targetMoment.clone().subtract(dayOffset, 'days');
+      if (previousDay.isSameOrAfter(today, 'day')) {
+        const prevResult = await checkDayAvailability(previousDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+        if (prevResult && prevResult.hasAvailability) {
+          alternativeDays.push({
+            ...prevResult,
+            distance: dayOffset,
+            direction: 'anterior',
+            priority: dayOffset * 10 + 1 // Priorizar días anteriores
+          });
+        }
+      }
+      
+      // Buscar día posterior
+      const nextDay = targetMoment.clone().add(dayOffset, 'days');
+      const nextResult = await checkDayAvailability(nextDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+      if (nextResult && nextResult.hasAvailability) {
+        alternativeDays.push({
+          ...nextResult,
+          distance: dayOffset,
+          direction: 'posterior',
+          priority: dayOffset * 10 + 2 // Priorizar días posteriores después de anteriores
+        });
+      }
+      
+      // Si ya encontramos suficientes días alternativos, parar
+      if (alternativeDays.length >= 3) {
+        break;
+      }
+    }
+    
+    // Ordenar por prioridad (días más cercanos primero, anteriores antes que posteriores)
+    alternativeDays.sort((a, b) => a.priority - b.priority);
+    
+    console.log(`✅ Días alternativos encontrados: ${alternativeDays.length}`);
+    alternativeDays.forEach(day => {
+      console.log(`   - ${day.dateStr} (${day.direction}, distancia: ${day.distance}): ${day.stats.availableSlots} slots`);
+    });
+    
+    return alternativeDays.slice(0, 3); // Máximo 3 días alternativos
+    
+  } catch (error) {
+    console.error('❌ Error buscando días alternativos:', error.message);
+    return [];
+  }
+}
+
+// Función auxiliar para verificar disponibilidad de un día específico
+async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration) {
+  try {
+    const dateStr = dayMoment.format('YYYY-MM-DD');
+    const jsDay = dayMoment.toDate().getDay();
+    const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
+    const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
+
+    if (!workingHours) {
+      return null; // No es día laboral
+    }
+
+    // Aplicar corrección de horario mínimo 10 AM
+    const correctedHours = {
+      start: Math.max(workingHours.start, 10),
+      end: workingHours.end,
+      dayName: workingHours.dayName
+    };
+
+    const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
+    
+    let availableSlots = [];
+    try {
+      // Intentar usar Google Calendar API real
+      const slotResult = await findAvailableSlots(calendarId, dayMoment.toDate(), parseInt(serviceDuration), correctedHours);
+      
+      if (typeof slotResult === 'object' && slotResult.slots !== undefined) {
+        availableSlots = slotResult.slots;
+      } else {
+        availableSlots = slotResult;
+      }
+    } catch (error) {
+      // Fallback a datos simulados
+      const mockResult = mockFindAvailableSlots(calendarId, dayMoment.toDate(), parseInt(serviceDuration), correctedHours);
+      if (typeof mockResult === 'object' && mockResult.slots !== undefined) {
+        availableSlots = mockResult.slots;
+      } else {
+        availableSlots = mockResult;
+      }
+    }
+
+    if (availableSlots.length > 0) {
+      const occupiedSlots = totalSlots - availableSlots.length;
+      const occupationPercentage = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
+      
+      return {
+        date: dayMoment.toDate(),
+        dateStr: dateStr,
+        slots: availableSlots,
+        hasAvailability: true,
+        stats: {
+          totalSlots: totalSlots,
+          availableSlots: availableSlots.length,
+          occupiedSlots: occupiedSlots,
+          occupationPercentage: occupationPercentage
+        }
+      };
+    }
+    
+    return null; // No hay disponibilidad
+  } catch (error) {
+    console.error(`❌ Error verificando día ${dayMoment.format('YYYY-MM-DD')}:`, error.message);
+    return null;
+  }
+}
+
 // Nueva función: Encontrar el siguiente día hábil
 function findNextWorkingDay(calendarNumber, startDate, hoursData) {
   try {
@@ -556,8 +684,66 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     }
     
     if (daysWithSlots.length === 0) {
+      // 🆕 NUEVA LÓGICA: Buscar días alternativos con disponibilidad
+      console.log(`🔍 No hay disponibilidad en fechas consultadas, buscando días alternativos...`);
+      
+      const alternativeDays = await findAlternativeDaysWithAvailability(
+        targetMoment, 
+        calendarNumber, 
+        serviceNumber, 
+        sheetData
+      );
+      
+      if (alternativeDays.length === 0) {
+        return res.json(createJsonResponse({ 
+          respuesta: `😔 No hay horarios disponibles para ${formatDateToSpanishPremium(targetDate)} ni en los días cercanos.\n\n🔍 Te sugerimos elegir una fecha más lejana o contactarnos directamente.` 
+        }));
+      }
+      
+      // Mostrar días alternativos con disponibilidad
+      let alternativeResponse = `😔 No hay disponibilidad para ${formatDateToSpanishPremium(targetDate)}, pero encontré estas opciones cercanas:\n\n`;
+      
+      let letterIndex = 0;
+      let dateMapping = {};
+      
+      for (const dayData of alternativeDays) {
+        const dayName = formatDateToSpanishPremium(dayData.date);
+        const occupationEmoji = getOccupationEmoji(dayData.stats.occupationPercentage);
+        const distanceText = dayData.direction === 'anterior' ? 
+          `📅 ${dayData.distance} día${dayData.distance > 1 ? 's' : ''} antes` : 
+          `📅 ${dayData.distance} día${dayData.distance > 1 ? 's' : ''} después`;
+        
+        alternativeResponse += `${occupationEmoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
+        alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles\n\n`;
+        
+        const formattedSlots = dayData.slots.map((slot) => {
+          const letterEmoji = getLetterEmoji(letterIndex);
+          const time12h = formatTimeTo12Hour(slot);
+          
+          dateMapping[String.fromCharCode(65 + letterIndex)] = {
+            date: dayData.dateStr,
+            time: slot,
+            dayName: dayName
+          };
+          
+          letterIndex++;
+          return `${letterEmoji} ${time12h}`;
+        }).join('\n');
+        
+        alternativeResponse += formattedSlots + '\n\n';
+      }
+      
+      alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✨`;
+      
       return res.json(createJsonResponse({ 
-        respuesta: `😔 No hay horarios disponibles en los 3 días alrededor de ${formatDateToSpanishPremium(targetDate)}.\n\n🔍 Te sugerimos elegir otra fecha con mejor disponibilidad.` 
+        respuesta: alternativeResponse,
+        metadata: {
+          originalDate: targetDateStr,
+          alternativeDaysFound: alternativeDays.length,
+          totalAlternativeSlots: alternativeDays.reduce((sum, day) => sum + day.stats.availableSlots, 0),
+          dateMapping: dateMapping,
+          isAlternativeSearch: true
+        }
       }));
     }
     
