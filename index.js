@@ -402,10 +402,21 @@ function mockGenerateSlotsForDay(dateMoment, workingHours) {
   console.log(`📅 Mock - Generando slots para ${dateMoment.format('YYYY-MM-DD')}`);
   console.log(`   - Es hoy: ${isToday}`);
   
+  // 🔍 LOGGING ESPECÍFICO: Mostrar si estamos en modo mock
+  console.log(`🚨 USANDO FUNCIÓN MOCK - NO Google Calendar real`);
+  console.log(`   - Fecha objetivo: ${dateMoment.format('YYYY-MM-DD')}`);
+  console.log(`   - Horario de trabajo: ${workingHours.start}:00 - ${workingHours.end}:00`);
+  console.log(`   - Incluye comida: ${workingHours.hasLunch ? 'Sí' : 'No'}`);
+  if (workingHours.hasLunch) {
+    console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
+  }
+
   for (let hour = workingHours.start; hour < workingHours.end; hour++) {
+    console.log(`   🔍 Mock - Evaluando hora: ${hour}:00`);
+    
     // Saltar horario de comida (si aplica)
     if (workingHours.hasLunch && hour >= workingHours.lunchStart && hour < workingHours.lunchEnd) {
-      console.log(`⏰ Mock - Saltando horario de comida: ${hour}:00`);
+      console.log(`   ⏰ Mock - Saltando horario de comida: ${hour}:00`);
       continue;
     }
     
@@ -414,13 +425,13 @@ function mockGenerateSlotsForDay(dateMoment, workingHours) {
     
     // Verificar si no es muy pronto para agendar (solo para hoy)
     if (isToday && slotTime.isBefore(minimumBookingTime)) {
-      console.log(`❌ Mock - Slot muy pronto: ${hour.toString().padStart(2, '0')}:00`);
+      console.log(`   ❌ Mock - Slot muy pronto: ${hour.toString().padStart(2, '0')}:00 (actual: ${now.format('HH:mm')}, mínimo: ${minimumBookingTime.format('HH:mm')})`);
       continue;
     }
     
     const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
     availableSlots.push(timeSlot);
-    console.log(`✅ Mock - Slot agregado: ${timeSlot}`);
+    console.log(`   ✅ Mock - Slot agregado: ${timeSlot}`);
   }
   
   console.log(`   - Mock slots generados: ${availableSlots.length} (cada hora)`);
@@ -1720,6 +1731,126 @@ app.post('/api/debug-sheets', async (req, res) => {
 });
 
 /**
+ * ENDPOINT: Debug específico para diagnosticar problemas de horarios
+ */
+app.get('/api/debug-horarios/:fecha', async (req, res) => {
+  try {
+    const fecha = req.params.fecha; // formato: YYYY-MM-DD
+    console.log(`🔍 === DEBUG DETALLADO HORARIOS: ${fecha} ===`);
+    
+    // Obtener datos de configuración
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+    } catch (error) {
+      return res.json({ error: `❌ Error obteniendo configuración: ${error.message}` });
+    }
+    
+    const calendarId = findData('1', sheetData.calendars, 0, 1);
+    const serviceDuration = findData('1', sheetData.services, 0, 1);
+    
+    console.log(`📊 Calendar ID: ${calendarId}`);
+    console.log(`⏱️ Duración servicio: ${serviceDuration} minutos`);
+    
+    // Crear moment para la fecha
+    const targetMoment = moment.tz(fecha, 'YYYY-MM-DD', config.timezone.default);
+    const jsDay = targetMoment.toDate().getDay();
+    const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
+    const workingHours = findWorkingHours('1', sheetDayNumber, sheetData.hours);
+    
+    let resultado = `🔍 DEBUG HORARIOS: ${fecha}\n\n`;
+    resultado += `📅 Día de la semana: ${targetMoment.format('dddd')} (JS: ${jsDay}, Sheet: ${sheetDayNumber})\n`;
+    resultado += `⏰ Horario laboral: ${workingHours ? workingHours.start + ':00 - ' + workingHours.end + ':00' : 'No definido'}\n\n`;
+    
+    if (!workingHours) {
+      return res.json({ debug: resultado + '❌ No es día laboral' });
+    }
+    
+    // Aplicar corrección de horario mínimo
+    const correctedHours = {
+      start: Math.max(workingHours.start, 10),
+      end: workingHours.end,
+      dayName: workingHours.dayName
+    };
+    
+    resultado += `🔧 Horario corregido: ${correctedHours.start}:00 - ${correctedHours.end}:00\n\n`;
+    
+    // Obtener slots disponibles
+    try {
+      console.log(`🔍 Llamando a findAvailableSlots...`);
+      const slotResult = await findAvailableSlots(calendarId, targetMoment.toDate(), parseInt(serviceDuration), correctedHours);
+      
+      let availableSlots = [];
+      if (typeof slotResult === 'object' && slotResult.slots !== undefined) {
+        availableSlots = slotResult.slots;
+        resultado += `📊 Resultado tipo objeto: ${slotResult.slots.length} slots\n`;
+        if (slotResult.message) {
+          resultado += `📝 Mensaje: ${slotResult.message}\n`;
+        }
+      } else {
+        availableSlots = slotResult;
+        resultado += `📊 Resultado array directo: ${slotResult.length} slots\n`;
+      }
+      
+      resultado += `\n✅ SLOTS DISPONIBLES (${availableSlots.length}):\n`;
+      if (availableSlots.length > 0) {
+        availableSlots.forEach(slot => {
+          resultado += `   - ${slot}\n`;
+        });
+      } else {
+        resultado += `   (Ninguno)\n`;
+      }
+      
+      // Verificar específicamente 11 AM y 12 PM
+      resultado += `\n🔍 ANÁLISIS ESPECÍFICO:\n`;
+      resultado += `   - ¿11:00 disponible? ${availableSlots.includes('11:00') ? '✅ SÍ' : '❌ NO'}\n`;
+      resultado += `   - ¿12:00 disponible? ${availableSlots.includes('12:00') ? '✅ SÍ' : '❌ NO'}\n`;
+      
+      return res.json({ 
+        debug: resultado,
+        availableSlots: availableSlots,
+        totalSlots: availableSlots.length,
+        fecha: fecha,
+        calendarId: calendarId.substring(0, 30) + '...',
+        workingHours: correctedHours
+      });
+      
+    } catch (error) {
+      console.log(`⚠️ Error con Google Calendar, probando mock...`);
+      const mockResult = mockFindAvailableSlots(calendarId, targetMoment.toDate(), parseInt(serviceDuration), correctedHours);
+      
+      let availableSlots = [];
+      if (typeof mockResult === 'object' && mockResult.slots !== undefined) {
+        availableSlots = mockResult.slots;
+      } else {
+        availableSlots = mockResult;
+      }
+      
+      resultado += `⚠️ USANDO DATOS MOCK (Error Google Calendar)\n`;
+      resultado += `📊 Mock slots: ${availableSlots.length}\n\n`;
+      
+      resultado += `✅ SLOTS MOCK (${availableSlots.length}):\n`;
+      availableSlots.forEach(slot => {
+        resultado += `   - ${slot}\n`;
+      });
+      
+      return res.json({ 
+        debug: resultado,
+        availableSlots: availableSlots,
+        totalSlots: availableSlots.length,
+        fecha: fecha,
+        usingMock: true,
+        error: error.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error en debug horarios:', error.message);
+    return res.json({ error: `💥 Error: ${error.message}` });
+  }
+});
+
+/**
  * ENDPOINT: Consultar datos de paciente por número telefónico
  * Busca información del paciente en Google Sheets usando el número de teléfono
  */
@@ -2355,8 +2486,9 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/debug-agenda`);
   console.log(`   POST ${serverUrl}/api/debug-sheets`);
   console.log(`   POST ${serverUrl}/api/test-email`);
-  console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
-  console.log(`\n🔧 Configuración:`);
+      console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
+    console.log(`   GET  ${serverUrl}/api/debug-horarios/:fecha`);
+    console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
   console.log(`   - Google Sheet ID: ${config.business.sheetId}`);
   console.log(`   - Google Auth: ${config.google.clientEmail ? '✅ Configurado' : '❌ Pendiente'}`);
