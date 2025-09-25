@@ -118,57 +118,79 @@ function getUrgencyText(percentage) {
 }
 
 // Nueva función: Buscar días alternativos con disponibilidad
-async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber, serviceNumber, sheetData, maxDaysToSearch = 7) {
+async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber, serviceNumber, sheetData, maxDaysToSearch = 14) {
   try {
     console.log(`🔍 === BUSCANDO DÍAS ALTERNATIVOS ===`);
-    console.log(`📅 Fecha objetivo: ${targetMoment.format('YYYY-MM-DD')}`);
+    console.log(`📅 Fecha objetivo: ${targetMoment.format('YYYY-MM-DD')} (${targetMoment.format('dddd')})`);
     
     const today = moment().tz(config.timezone.default).startOf('day');
     const alternativeDays = [];
     const serviceDuration = findData(serviceNumber, sheetData.services, 0, 1);
     const calendarId = findData(calendarNumber, sheetData.calendars, 0, 1);
     
-    // Buscar hacia atrás y hacia adelante desde la fecha objetivo
+    // 🎯 NUEVA ESTRATEGIA: Buscar principalmente hacia adelante
+    console.log(`📈 Buscando días posteriores con disponibilidad real...`);
+    
+    // Buscar hacia adelante hasta encontrar al menos 2 días con buena disponibilidad
     for (let dayOffset = 1; dayOffset <= maxDaysToSearch; dayOffset++) {
+      const nextDay = targetMoment.clone().add(dayOffset, 'days');
+      const nextResult = await checkDayAvailability(nextDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
       
-      // Buscar día anterior (solo si no es en el pasado)
-      const previousDay = targetMoment.clone().subtract(dayOffset, 'days');
-      if (previousDay.isSameOrAfter(today, 'day')) {
-        const prevResult = await checkDayAvailability(previousDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
-        if (prevResult && prevResult.hasAvailability) {
+      if (nextResult && nextResult.hasAvailability) {
+        // ✅ Solo incluir días con disponibilidad decente (más de 1 slot)
+        if (nextResult.stats.availableSlots >= 2) {
           alternativeDays.push({
-            ...prevResult,
+            ...nextResult,
             distance: dayOffset,
-            direction: 'anterior',
-            priority: dayOffset * 10 + 1 // Priorizar días anteriores
+            direction: 'posterior',
+            priority: dayOffset // Prioridad simple por cercanía
           });
+          
+          console.log(`   ✅ Día viable encontrado: ${nextResult.dateStr} (${nextResult.dayName}) - ${nextResult.stats.availableSlots} slots`);
+        } else {
+          console.log(`   ⚠️ Día con poca disponibilidad: ${nextResult.dateStr} - solo ${nextResult.stats.availableSlots} slot(s)`);
         }
       }
       
-      // Buscar día posterior
-      const nextDay = targetMoment.clone().add(dayOffset, 'days');
-      const nextResult = await checkDayAvailability(nextDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
-      if (nextResult && nextResult.hasAvailability) {
-        alternativeDays.push({
-          ...nextResult,
-          distance: dayOffset,
-          direction: 'posterior',
-          priority: dayOffset * 10 + 2 // Priorizar días posteriores después de anteriores
-        });
-      }
-      
-      // Si ya encontramos suficientes días alternativos, parar
-      if (alternativeDays.length >= 3) {
+      // ✅ Parar cuando tengamos al menos 2 días con buena disponibilidad
+      if (alternativeDays.length >= 2) {
+        console.log(`🎯 Encontrados ${alternativeDays.length} días alternativos viables`);
         break;
       }
     }
     
-    // Ordenar por prioridad (días más cercanos primero, anteriores antes que posteriores)
+    // Si no encontramos suficientes días hacia adelante, buscar hacia atrás también
+    if (alternativeDays.length < 2) {
+      console.log(`📉 Buscando también días anteriores...`);
+      
+      for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+        const previousDay = targetMoment.clone().subtract(dayOffset, 'days');
+        
+        if (previousDay.isSameOrAfter(today, 'day')) {
+          const prevResult = await checkDayAvailability(previousDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+          
+          if (prevResult && prevResult.hasAvailability && prevResult.stats.availableSlots >= 2) {
+            alternativeDays.push({
+              ...prevResult,
+              distance: dayOffset,
+              direction: 'anterior',
+              priority: dayOffset + 100 // Prioridad menor que posteriores
+            });
+            
+            console.log(`   ✅ Día anterior viable: ${prevResult.dateStr} (${prevResult.dayName}) - ${prevResult.stats.availableSlots} slots`);
+          }
+        }
+        
+        if (alternativeDays.length >= 2) break;
+      }
+    }
+    
+    // Ordenar por prioridad
     alternativeDays.sort((a, b) => a.priority - b.priority);
     
-    console.log(`✅ Días alternativos encontrados: ${alternativeDays.length}`);
+    console.log(`🎯 RESULTADO FINAL: ${alternativeDays.length} días alternativos encontrados`);
     alternativeDays.forEach(day => {
-      console.log(`   - ${day.dateStr} (${day.direction}, distancia: ${day.distance}): ${day.stats.availableSlots} slots`);
+      console.log(`   - ${day.dateStr} (${day.dayName}, ${day.direction}, ${day.distance} días): ${day.stats.availableSlots} slots`);
     });
     
     return alternativeDays.slice(0, 3); // Máximo 3 días alternativos
@@ -187,7 +209,10 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
     const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
     const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
 
+    console.log(`🔍 Verificando día ${dateStr} (${moment(dayMoment).format('dddd')})`);
+
     if (!workingHours) {
+      console.log(`   ❌ No es día laboral`);
       return null; // No es día laboral
     }
 
@@ -198,37 +223,41 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
       dayName: workingHours.dayName
     };
 
+    console.log(`   ⏰ Horario: ${correctedHours.start}:00 - ${correctedHours.end}:00`);
+
     const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
     
     let availableSlots = [];
     try {
-      // Intentar usar Google Calendar API real
+      // 🆕 PARA DÍAS ALTERNATIVOS: Usar lógica simplificada sin mensajes especiales
       const slotResult = await findAvailableSlots(calendarId, dayMoment.toDate(), parseInt(serviceDuration), correctedHours);
       
       if (typeof slotResult === 'object' && slotResult.slots !== undefined) {
         availableSlots = slotResult.slots;
+        // 🚫 IGNORAR mensajes especiales en búsqueda alternativa
       } else {
         availableSlots = slotResult;
       }
     } catch (error) {
-      // Fallback a datos simulados
-      const mockResult = mockFindAvailableSlots(calendarId, dayMoment.toDate(), parseInt(serviceDuration), correctedHours);
-      if (typeof mockResult === 'object' && mockResult.slots !== undefined) {
-        availableSlots = mockResult.slots;
-      } else {
-        availableSlots = mockResult;
-      }
+      console.log(`   ⚠️ Error Google Calendar, usando mock para verificación`);
+      // Usar mock simplificado solo para verificar disponibilidad
+      availableSlots = mockGenerateSlotsForDay(dayMoment, correctedHours);
     }
+
+    console.log(`   📊 Slots encontrados: ${availableSlots.length}`);
 
     if (availableSlots.length > 0) {
       const occupiedSlots = totalSlots - availableSlots.length;
       const occupationPercentage = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
+      
+      console.log(`   ✅ Día viable: ${availableSlots.length} slots disponibles`);
       
       return {
         date: dayMoment.toDate(),
         dateStr: dateStr,
         slots: availableSlots,
         hasAvailability: true,
+        dayName: moment(dayMoment).format('dddd'),
         stats: {
           totalSlots: totalSlots,
           availableSlots: availableSlots.length,
@@ -238,6 +267,7 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
       };
     }
     
+    console.log(`   ❌ Sin disponibilidad`);
     return null; // No hay disponibilidad
   } catch (error) {
     console.error(`❌ Error verificando día ${dayMoment.format('YYYY-MM-DD')}:`, error.message);
@@ -370,13 +400,13 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
     lunchStart: config.workingHours.lunchStartHour,
     lunchEnd: config.workingHours.lunchEndHour,
     hasLunch: true
-      } : {
+  } : {
       start: hours?.start || 10,
-      end: hours?.end || 19,
-      lunchStart: 14,  // 2 PM fijo
-      lunchEnd: 15,    // 3 PM fijo
-      hasLunch: true
-    };
+    end: hours?.end || 19,
+    lunchStart: 14,  // 2 PM fijo
+    lunchEnd: 15,    // 3 PM fijo
+    hasLunch: true
+  };
   
   console.log(`⚙️ Mock - Horarios de trabajo (${dayNames[dayOfWeek]}):`);
   console.log(`   - Inicio: ${workingHours.start}:00`);
@@ -410,7 +440,7 @@ function mockGenerateSlotsForDay(dateMoment, workingHours) {
   if (workingHours.hasLunch) {
     console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
   }
-
+  
   for (let hour = workingHours.start; hour < workingHours.end; hour++) {
     console.log(`   🔍 Mock - Evaluando hora: ${hour}:00`);
     
@@ -706,13 +736,14 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       );
       
       if (alternativeDays.length === 0) {
-        return res.json(createJsonResponse({ 
+      return res.json(createJsonResponse({ 
           respuesta: `😔 No hay horarios disponibles para ${formatDateToSpanishPremium(targetDate)} ni en los días cercanos.\n\n🔍 Te sugerimos elegir una fecha más lejana o contactarnos directamente.` 
         }));
       }
       
-      // Mostrar días alternativos con disponibilidad
-      let alternativeResponse = `😔 No hay disponibilidad para ${formatDateToSpanishPremium(targetDate)}, pero encontré estas opciones cercanas:\n\n`;
+      // 🆕 MENSAJE MEJORADO: Claro y específico
+      const originalDayName = formatDateToSpanishPremium(targetDate);
+      let alternativeResponse = `😔 No tengo disponibilidad para *${originalDayName}* (${targetDateStr}), pero sí tengo para estos días:\n\n`;
       
       let letterIndex = 0;
       let dateMapping = {};
@@ -720,9 +751,22 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       for (const dayData of alternativeDays) {
         const dayName = formatDateToSpanishPremium(dayData.date);
         const occupationEmoji = getOccupationEmoji(dayData.stats.occupationPercentage);
-        const distanceText = dayData.direction === 'anterior' ? 
-          `📅 ${dayData.distance} día${dayData.distance > 1 ? 's' : ''} antes` : 
-          `📅 ${dayData.distance} día${dayData.distance > 1 ? 's' : ''} después`;
+        
+        // 🎯 Mensaje más claro de distancia
+        let distanceText = '';
+        if (dayData.direction === 'anterior') {
+          if (dayData.distance === 1) {
+            distanceText = '📅 1 día antes';
+          } else {
+            distanceText = `📅 ${dayData.distance} días antes`;
+          }
+        } else {
+          if (dayData.distance === 1) {
+            distanceText = '📅 1 día después';
+          } else {
+            distanceText = `📅 ${dayData.distance} días después`;
+          }
+        }
         
         alternativeResponse += `${occupationEmoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
         alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles\n\n`;
@@ -762,7 +806,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     
     //let responseText = `🔥 ¡${daysWithSlots.length} ${daysWithSlots.length === 1 ? 'día' : 'días'} con disponibilidad encontrada!\n\n`;
     let responseText = '';
-
+    
     const totalSlotsAvailable = daysWithSlots.reduce((sum, day) => sum + day.stats.availableSlots, 0);
     const avgOccupation = Math.round(daysWithSlots.reduce((sum, day) => sum + day.stats.occupationPercentage, 0) / daysWithSlots.length);
     
@@ -1273,9 +1317,9 @@ app.post('/api/agenda-cita', async (req, res) => {
       const nextWorkingDayName = formatDateToSpanishPremium(nextWorkingDay.toDate());
       const nextWorkingDateStr = nextWorkingDay.format('YYYY-MM-DD');
       
-              return res.json({ 
+      return res.json({ 
           respuesta: `🤚 Debes agendar con al menos una hora de anticipación. No puedes reservar para las ${time12h} de hoy.\n\n📅 El siguiente día hábil es: ${nextWorkingDayName} (${nextWorkingDateStr})\n\n🔍 Te recomiendo consultar la disponibilidad para esa fecha antes de agendar tu cita.` 
-        });
+      });
     }
 
     // PASO 3: OBTENER CONFIGURACIÓN (lógica original)
@@ -2488,7 +2532,7 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/test-email`);
       console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
     console.log(`   GET  ${serverUrl}/api/debug-horarios/:fecha`);
-    console.log(`\n🔧 Configuración:`);
+  console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
   console.log(`   - Google Sheet ID: ${config.business.sheetId}`);
   console.log(`   - Google Auth: ${config.google.clientEmail ? '✅ Configurado' : '❌ Pendiente'}`);
