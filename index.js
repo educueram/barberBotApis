@@ -787,7 +787,7 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         alternativeResponse += formattedSlots + '\n\n';
       }
       
-      alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✨`;
+      alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✈️`;
       
       return res.json(createJsonResponse({ 
         respuesta: alternativeResponse,
@@ -852,11 +852,11 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
     }
     
     if (hasLowDemandDay) {
-      responseText += `✨ *¡Perfecto!* Algunos días tienen excelente disponibilidad\n`;
+      responseText += `✈️ *¡Perfecto!* Algunos días tienen excelente disponibilidad\n`;
     }
       */
     
-    responseText += `\n💡 Escribe la letra del horario que prefieras (A, B, C...) ✨`;
+    responseText += `\n💡 Escribe la letra del horario que prefieras (A, B, C...) ✈️`;
     
     return res.json(createJsonResponse({ 
       respuesta: responseText,
@@ -1477,7 +1477,7 @@ Agendado por: Agente de WhatsApp`;
     console.log('time12h:', time12h);
 
     const finalResponse = {
-      respuesta: `✅ ¡Cita confirmada! ✨\n\nDetalles de tu cita:\n📅 Fecha: ${date}\n⏰ Hora: ${time12h}\n👨‍⚕️ Especialista: ${profesionalName || 'el especialista'}\n\n🎟️ TU CÓDIGO DE RESERVA ES: ${codigoReserva}\n\n¡Gracias por confiar en nosotros! 🌟`,
+        respuesta: `✅ ¡Cita confirmada! ✈️\n\nDetalles de tu cita:\n📅 Fecha: ${date}\n⏰ Hora: ${time12h}\n👨‍⚕️ Especialista: ${profesionalName || 'el especialista'}\n\n🎟️ TU CÓDIGO DE RESERVA ES: ${codigoReserva}\n\n¡Gracias por confiar en nosotros! 🌟`,
       id_cita: codigoReserva
     };
 
@@ -1852,7 +1852,7 @@ app.get('/api/test-alternativos/:fecha', async (req, res) => {
       alternativeResponse += formattedSlots + '\n\n';
     }
     
-    alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✨`;
+    alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✈️`;
     
     return res.json({
       test: "✅ DÍAS ALTERNATIVOS ENCONTRADOS",
@@ -2253,7 +2253,7 @@ const swaggerDocument = {
                       properties: {
                         respuesta: { 
                           type: 'string',
-                          example: '✅ ¡Cita confirmada! ✨\n\nDetalles de tu cita:\n📅 Fecha: 2025-08-27\n⏰ Hora: 2:00 PM\n👨‍⚕️ Especialista: Dr. Juan\n\n🎟️ TU CÓDIGO DE RESERVA ES: ABC123\n\n¡Gracias por confiar en nosotros! 🌟'
+                          example: '✅ ¡Cita confirmada! ✈️\n\nDetalles de tu cita:\n📅 Fecha: 2025-08-27\n⏰ Hora: 2:00 PM\n👨‍⚕️ Especialista: Dr. Juan\n\n🎟️ TU CÓDIGO DE RESERVA ES: ABC123\n\n¡Gracias por confiar en nosotros! 🌟'
                         },
                         id_cita: { 
                           type: 'string',
