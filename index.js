@@ -216,14 +216,23 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
       return null; // No es día laboral
     }
 
-    // Aplicar corrección de horario mínimo 10 AM
+    // Aplicar corrección de horario mínimo 10 AM + incluir horario de comida
+    const dayOfWeek = dayMoment.toDate().getDay();
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+    
     const correctedHours = {
       start: Math.max(workingHours.start, 10),
       end: workingHours.end,
-      dayName: workingHours.dayName
+      dayName: workingHours.dayName,
+      // 🔧 ARREGLO CRÍTICO: Incluir horario de comida como mockFindAvailableSlots
+      lunchStart: isSaturday ? null : (workingHours.lunchStart || 14),  // Sin comida sábados
+      lunchEnd: isSaturday ? null : (workingHours.lunchEnd || 15),      // Sin comida sábados  
+      hasLunch: !isSaturday && !isSunday // Solo días de semana tienen horario de comida
     };
 
     console.log(`   ⏰ Horario: ${correctedHours.start}:00 - ${correctedHours.end}:00`);
+    console.log(`   🍽️ Horario comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00 - ${correctedHours.lunchEnd}:00` : 'No aplica'}`);
 
     const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
     
@@ -658,16 +667,24 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
 
         if (workingHours) {
-          // CORRECCIÓN: Asegurar que nunca se inicie antes de las 10 AM
+          // CORRECCIÓN: Asegurar que nunca se inicie antes de las 10 AM + horario comida
+          const isSaturday = jsDay === 6;
+          const isSunday = jsDay === 0;
+          
           const correctedHours = {
             start: Math.max(workingHours.start, 10), // Mínimo 10 AM
             end: workingHours.end,
-            dayName: workingHours.dayName
+            dayName: workingHours.dayName,
+            // 🔧 CONSISTENCIA: Incluir horario de comida como en días alternativos
+            lunchStart: isSaturday ? null : (workingHours.lunchStart || 14),
+            lunchEnd: isSaturday ? null : (workingHours.lunchEnd || 15),
+            hasLunch: !isSaturday && !isSunday
           };
           
           console.log(`📅 Procesando día ${dayInfo.label}: ${dateStr}`);
           console.log(`   - Horario original: ${workingHours.start}:00 - ${workingHours.end}:00`);
           console.log(`   - Horario corregido: ${correctedHours.start}:00 - ${correctedHours.end}:00`);
+          console.log(`   - Horario comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00 - ${correctedHours.lunchEnd}:00` : 'No aplica'}`);
           
           const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
           
@@ -1936,14 +1953,23 @@ app.get('/api/debug-horarios/:fecha', async (req, res) => {
       return res.json({ debug: resultado + '❌ No es día laboral' });
     }
     
-    // Aplicar corrección de horario mínimo
+    // Aplicar corrección de horario mínimo + horario comida
+    const targetDayOfWeek = targetMoment.toDate().getDay();
+    const isSaturday = targetDayOfWeek === 6;
+    const isSunday = targetDayOfWeek === 0;
+    
     const correctedHours = {
       start: Math.max(workingHours.start, 10),
       end: workingHours.end,
-      dayName: workingHours.dayName
+      dayName: workingHours.dayName,
+      // 🔧 CONSISTENCIA: Incluir horario de comida
+      lunchStart: isSaturday ? null : (workingHours.lunchStart || 14),
+      lunchEnd: isSaturday ? null : (workingHours.lunchEnd || 15),
+      hasLunch: !isSaturday && !isSunday
     };
     
-    resultado += `🔧 Horario corregido: ${correctedHours.start}:00 - ${correctedHours.end}:00\n\n`;
+    resultado += `🔧 Horario corregido: ${correctedHours.start}:00 - ${correctedHours.end}:00\n`;
+    resultado += `🍽️ Horario comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00 - ${correctedHours.lunchEnd}:00` : 'No aplica'}\n\n`;
     
     // Obtener slots disponibles
     try {
