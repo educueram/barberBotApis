@@ -36,58 +36,41 @@ async function findAvailableSlots(calendarId, date, durationMinutes, hours) {
       };
     }
     
-    // VALIDACIÓN: SÁBADO - Horario especial (10 AM - 12 PM)
+    // VALIDACIÓN: SÁBADO - Horario especial (10 AM - 1 PM)
     if (dayOfWeek === 6) { // Sábado
-      console.log(`📅 SÁBADO - Horario especial: 10:00 AM - 12:00 PM`);
+      console.log(`📅 SÁBADO - Horario especial: 10:00 AM - 1:00 PM`);
       const saturdayHours = {
         start: config.workingHours.saturday.startHour,
-        end: config.workingHours.saturday.endHour,
-        lunchStart: null, // Sin horario de comida los sábados
-        lunchEnd: null,
-        hasLunch: false
+        end: config.workingHours.saturday.endHour
       };
       
       console.log(`⚙️ Horarios de sábado:`);
       console.log(`   - Inicio: ${saturdayHours.start}:00`);
       console.log(`   - Fin: ${saturdayHours.end}:00`);
-      console.log(`   - Sin horario de comida`);
       
-             const slots = await generateSlotsForDay(calendar, calendarId, dateMoment, saturdayHours, durationMinutes);
+      const slots = await generateSlotsForDay(calendar, calendarId, dateMoment, saturdayHours, durationMinutes);
       
-      if (slots.length === 0) {
-        return {
-          slots: [],
-          message: '📅 Sábados trabajamos de 10:00 AM a 12:00 PM, pero no hay espacios disponibles.',
-          dayType: 'saturday-full'
-        };
-      }
-      
+      // Simplemente retornar los slots sin mensajes especiales
       return {
         slots: slots,
         message: null,
-        dayType: 'saturday-special'
+        dayType: slots.length === 0 ? 'saturday-full' : 'saturday-special'
       };
     }
     
     // HORARIOS NORMALES (Lunes a Viernes)
     const workingHours = config.workingHours.forceFixedSchedule ? {
       start: config.workingHours.startHour,
-      end: config.workingHours.endHour,
-      lunchStart: config.workingHours.lunchStartHour,
-      lunchEnd: config.workingHours.lunchEndHour,
-      hasLunch: true
+      end: config.workingHours.endHour
     } : {
       start: hours?.start || 10,
-      end: hours?.end || 19,
-      lunchStart: 14,  // 2 PM fijo
-      lunchEnd: 15,    // 3 PM fijo
-      hasLunch: true
+      end: hours?.end || 19
     };
     
     console.log(`⚙️ Horarios de trabajo (${dayNames[dayOfWeek]}):`);
     console.log(`   - Inicio: ${workingHours.start}:00`);
     console.log(`   - Fin: ${workingHours.end}:00`);
-    console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
+    console.log(`   - Comida: Flexible según eventos del calendario`);
     
     // Para días normales, usar la lógica existente
     const slots = await generateSlotsForDay(calendar, calendarId, dateMoment, workingHours, durationMinutes);
