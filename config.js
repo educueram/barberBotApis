@@ -88,7 +88,7 @@ const config = {
     saturday: {
       enabled: true,
       startHour: parseInt(process.env.SATURDAY_START_HOUR) || 10, // 10 AM
-      endHour: parseInt(process.env.SATURDAY_END_HOUR) || 12,     // 12 PM
+      endHour: parseInt(process.env.SATURDAY_END_HOUR) || 13,     // 1 PM (13:00)
       hasLunch: false // No hay horario de comida los sábados
     },
     sunday: {

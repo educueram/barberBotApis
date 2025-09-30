@@ -111,23 +111,10 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
     const startOfDay = dateMoment.clone().hour(workingHours.start).minute(0).second(0);
     const endOfDay = dateMoment.clone().hour(workingHours.end).minute(0).second(0);
     
-    let lunchStart = null;
-    let lunchEnd = null;
-    
-    if (workingHours.hasLunch && workingHours.lunchStart && workingHours.lunchEnd) {
-      lunchStart = dateMoment.clone().hour(workingHours.lunchStart).minute(0).second(0);
-      lunchEnd = dateMoment.clone().hour(workingHours.lunchEnd).minute(0).second(0);
-    }
-    
     console.log(`📅 Fechas calculadas en ${config.timezone.default}:`);
     console.log(`   - Inicio del día: ${startOfDay.format('YYYY-MM-DD HH:mm:ss z')}`);
     console.log(`   - Fin del día: ${endOfDay.format('YYYY-MM-DD HH:mm:ss z')}`);
-    if (lunchStart && lunchEnd) {
-      console.log(`   - Comida inicio: ${lunchStart.format('HH:mm')}`);
-      console.log(`   - Comida fin: ${lunchEnd.format('HH:mm')}`);
-    } else {
-      console.log(`   - Sin horario de comida`);
-    }
+    console.log(`   - Horario de comida: Flexible según eventos del calendario`);
     
     const now = moment().tz(config.timezone.default);
     const minimumBookingTime = now.clone().add(1, 'hours');
@@ -160,32 +147,21 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
       console.log(`      - Fin: ${eventEnd.format('YYYY-MM-DD HH:mm:ss z')}`);
     });
 
-    // Agregar el horario de comida como un evento bloqueado (si aplica)
+    // Crear lista de slots ocupados solo con eventos del calendario
     const busySlots = events.map(event => ({
       start: moment(event.start.dateTime || event.start.date).tz(config.timezone.default),
       end: moment(event.end.dateTime || event.end.date).tz(config.timezone.default),
       type: `appointment: ${event.summary || 'Sin título'}`
     }));
 
-    // Agregar horario de comida como slot bloqueado (solo si existe)
-    if (lunchStart && lunchEnd) {
-      busySlots.push({
-        start: lunchStart.clone(),
-        end: lunchEnd.clone(),
-        type: 'lunch'
-      });
-    }
-
     // Ordenar slots ocupados por hora de inicio
     busySlots.sort((a, b) => a.start.valueOf() - b.start.valueOf());
 
-    console.log(`   - Slots ocupados (${workingHours.hasLunch ? 'incluyendo comida' : 'sin comida'}): ${busySlots.length}`);
-
-    // Función auxiliar para verificar si un horario está en periodo de comida
-    const isLunchTime = (time) => {
-      if (!lunchStart || !lunchEnd) return false;
-      return time.isSameOrAfter(lunchStart) && time.isBefore(lunchEnd);
-    };
+    console.log(`   - Slots ocupados por eventos: ${busySlots.length}`);
+    console.log(`   📋 Detalle de slots ocupados:`);
+    busySlots.forEach((slot, index) => {
+      console.log(`      ${index + 1}. ${slot.start.format('HH:mm')}-${slot.end.format('HH:mm')} - ${slot.type}`);
+    });
 
     // Función auxiliar para verificar si un horario está fuera del horario laboral
     const isOutsideWorkingHours = (time) => {
@@ -193,78 +169,63 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
       return hour < workingHours.start || hour >= workingHours.end;
     };
 
-    // 🆕 NUEVA LÓGICA: Generar slots hora por hora y verificar disponibilidad individualmente
+    // Generar slots hora por hora y verificar disponibilidad individualmente
     const availableSlots = [];
     
     // Función auxiliar para verificar si un slot específico está ocupado
     const isSlotOccupied = (slotTime) => {
       const slotEnd = slotTime.clone().add(1, 'hour');
       
-      // 🔍 LOGGING DETALLADO para slots específicos (11 AM y 12 PM)
-      const hour = slotTime.hour();
-      if (hour === 11 || hour === 12) {
-        console.log(`   🔍 ANÁLISIS DETALLADO SLOT ${slotTime.format('HH:mm')}:`);
-        console.log(`      - Slot va de ${slotTime.format('HH:mm')} a ${slotEnd.format('HH:mm')}`);
-        console.log(`      - Evaluando contra ${busySlots.length} eventos ocupados:`);
-      }
+      console.log(`      🔎 Verificando overlap para slot ${slotTime.format('HH:mm')}-${slotEnd.format('HH:mm')}:`);
       
       for (const busySlot of busySlots) {
+        // Verificar si hay solapamiento entre el slot propuesto y el evento ocupado
+        // Un slot de 1 hora está ocupado si:
+        // - El inicio del slot es antes del fin del evento Y
+        // - El fin del slot es después del inicio del evento
         const hasOverlap = slotTime.isBefore(busySlot.end) && slotEnd.isAfter(busySlot.start);
         
-        if (hour === 11 || hour === 12) {
-          console.log(`        📅 ${busySlot.type}:`);
-          console.log(`           - Evento: ${busySlot.start.format('HH:mm')} a ${busySlot.end.format('HH:mm')}`);
-          console.log(`           - ¿Solapamiento? ${hasOverlap}`);
-          if (hasOverlap) {
-            console.log(`           - ✅ CONFLICTO DETECTADO`);
-          }
-        }
+        console.log(`         Evento: ${busySlot.start.format('HH:mm')}-${busySlot.end.format('HH:mm')} | Overlap: ${hasOverlap ? 'SÍ ❌' : 'NO ✓'}`);
         
-        // Verificar si hay solapamiento entre el slot propuesto y el evento ocupado
         if (hasOverlap) {
-          console.log(`   🔒 Slot ${slotTime.format('HH:mm')} ocupado por: ${busySlot.type}`);
+          console.log(`         🔒 CONFLICTO con: ${busySlot.type}`);
           return true;
         }
       }
       
-      if (hour === 11 || hour === 12) {
-        console.log(`      ✅ RESULTADO: Slot ${slotTime.format('HH:mm')} NO tiene conflictos`);
-      }
-      
+      console.log(`         ✅ Sin conflictos`);
       return false;
     };
 
     // Generar slots de hora en hora desde el inicio hasta el fin del día laboral
+    console.log(`\n🔄 === GENERANDO SLOTS DE ${workingHours.start}:00 A ${workingHours.end}:00 ===`);
     for (let hour = workingHours.start; hour < workingHours.end; hour++) {
       const slotTime = dateMoment.clone().hour(hour).minute(0).second(0);
+      const slotEnd = slotTime.clone().add(1, 'hour');
       
-      console.log(`   🔍 Evaluando slot: ${slotTime.format('HH:mm')}`);
+      console.log(`\n   🔍 Evaluando slot ${hour}: ${slotTime.format('HH:mm')}-${slotEnd.format('HH:mm')}`);
       
       // Verificar restricciones básicas
       if (isOutsideWorkingHours(slotTime)) {
-        console.log(`   ❌ Slot ${slotTime.format('HH:mm')} rechazado: fuera de horario laboral`);
-        continue;
-      }
-      
-      if (isLunchTime(slotTime)) {
-        console.log(`   ❌ Slot ${slotTime.format('HH:mm')} rechazado: horario de comida`);
+        console.log(`      ❌ RECHAZADO: fuera de horario laboral`);
         continue;
       }
       
       if (isToday && slotTime.isBefore(minimumBookingTime)) {
-        console.log(`   ❌ Slot ${slotTime.format('HH:mm')} rechazado: muy pronto (menos de 1 hora anticipación)`);
+        console.log(`      ❌ RECHAZADO: muy pronto (hora actual: ${now.format('HH:mm')}, mínimo: ${minimumBookingTime.format('HH:mm')})`);
         continue;
       }
       
-      // Verificar si el slot está ocupado por algún evento
+      // Verificar si el slot está ocupado por algún evento (incluyendo comida)
       if (isSlotOccupied(slotTime)) {
-        continue; // Ya se logueó dentro de la función
+        console.log(`      ❌ RECHAZADO: ocupado por evento`);
+        continue;
       }
       
       // Si llegamos aquí, el slot está disponible
       const timeSlot = slotTime.format('HH:mm');
       availableSlots.push(timeSlot);
-      console.log(`   ✅ Slot agregado: ${timeSlot}`);
+      console.log(`      ✅ DISPONIBLE - Agregado a la lista`);
     }
 
     console.log(`   - Slots disponibles: ${availableSlots.length} (cada hora)`);
