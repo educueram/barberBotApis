@@ -171,6 +171,8 @@ async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber,
       for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
         const previousDay = targetMoment.clone().subtract(dayOffset, 'days');
         
+        console.log(`   🔍 Evaluando día anterior: ${previousDay.format('YYYY-MM-DD')} (${previousDay.format('dddd')})`);
+        
         if (previousDay.isSameOrAfter(today, 'day')) {
           const prevResult = await checkDayAvailability(previousDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
           
@@ -1980,6 +1982,156 @@ app.get('/api/debug-martes-30', async (req, res) => {
 });
 
 /**
+ * ENDPOINT: Debug genérico para cualquier día
+ */
+app.get('/api/debug-dia/:fecha', async (req, res) => {
+  try {
+    const fecha = req.params.fecha; // formato: YYYY-MM-DD
+    const calendarNumber = '1';
+    const serviceNumber = '1';
+    
+    console.log(`🔥 === DEBUG DÍA GENÉRICO: ${fecha} ===`);
+    
+    // Parsear fecha
+    const targetMoment = moment.tz(fecha, 'YYYY-MM-DD', config.timezone.default);
+    
+    if (!targetMoment.isValid()) {
+      return res.json({ error: 'Fecha inválida. Usar formato YYYY-MM-DD' });
+    }
+    
+    // Verificar que no sea domingo
+    const dayOfWeek = targetMoment.day();
+    if (dayOfWeek === 0) {
+      return res.json({ 
+        error: 'Domingos no tienen servicio',
+        fecha: fecha,
+        dayName: 'Domingo'
+      });
+    }
+    
+    let debug = [];
+    debug.push(`🔥 DEBUG DÍA GENÉRICO: ${fecha}`);
+    debug.push(`📅 ${targetMoment.format('dddd DD [de] MMMM [de] YYYY')}`);
+    debug.push(`================================`);
+    
+    // Obtener datos
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+      debug.push(`✅ Google Sheets: CONECTADO`);
+    } catch (error) {
+      sheetData = developmentMockData;
+      debug.push(`⚠️ Google Sheets: ERROR - Usando Mock`);
+    }
+    
+    const serviceDuration = findData(serviceNumber, sheetData.services, 0, 1);
+    const calendarId = findData(calendarNumber, sheetData.calendars, 0, 1);
+    
+    debug.push(`📊 Configuración:`);
+    debug.push(`   - Calendar ID: ${calendarId?.substring(0, 40)}...`);
+    debug.push(`   - Duración servicio: ${serviceDuration} min`);
+    
+    // Verificar día laboral
+    const jsDay = targetMoment.toDate().getDay();
+    const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
+    const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
+    
+    debug.push(`\n🕒 Verificación día laboral:`);
+    debug.push(`   - Día de semana: ${targetMoment.format('dddd')} (${dayOfWeek})`);
+    debug.push(`   - Working Hours: ${workingHours ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
+    
+    if (!workingHours) {
+      debug.push(`❌ PROBLEMA: No es día laboral`);
+      return res.json({ 
+        debug: debug.join('\n'),
+        error: 'No es día laboral',
+        fecha: fecha 
+      });
+    }
+    
+    debug.push(`   - Horario original: ${workingHours.start}:00 - ${workingHours.end}:00`);
+    
+    // Aplicar correcciones
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+    
+    const correctedHours = {
+      start: Math.max(workingHours.start, 10),
+      end: workingHours.end,
+      dayName: workingHours.dayName,
+      lunchStart: isSaturday ? null : (workingHours.lunchStart || 14),
+      lunchEnd: isSaturday ? null : (workingHours.lunchEnd || 15),
+      hasLunch: !isSaturday && !isSunday
+    };
+    
+    debug.push(`\n🔧 Horario corregido:`);
+    debug.push(`   - Inicio: ${correctedHours.start}:00`);
+    debug.push(`   - Fin: ${correctedHours.end}:00`);
+    debug.push(`   - Comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00-${correctedHours.lunchEnd}:00` : 'No aplica'}`);
+    
+    // PASO CRÍTICO: Llamar a checkDayAvailability
+    debug.push(`\n🎯 === LLAMANDO A checkDayAvailability ===`);
+    
+    try {
+      const dayResult = await checkDayAvailability(targetMoment, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+      
+      debug.push(`📊 Resultado checkDayAvailability:`);
+      if (dayResult && dayResult.hasAvailability) {
+        debug.push(`   ✅ TIENE disponibilidad`);
+        debug.push(`   - Slots disponibles: ${dayResult.stats.availableSlots}`);
+        debug.push(`   - Slots totales: ${dayResult.stats.totalSlots}`);
+        debug.push(`   - Ocupación: ${dayResult.stats.occupationPercentage}%`);
+        debug.push(`   - Fuente datos: ${dayResult.dataSource}`);
+        debug.push(`   - Horarios: [${dayResult.slots?.join(', ')}]`);
+        debug.push(`   - ¿Cumple filtro >= 2? ${dayResult.stats.availableSlots >= 2 ? 'SÍ' : 'NO'}`);
+        
+        if (dayResult.stats.availableSlots >= 2) {
+          debug.push(`   🎯 DEBERÍA aparecer en días alternativos`);
+        } else {
+          debug.push(`   ⚠️ NO cumple filtro mínimo para días alternativos`);
+        }
+      } else {
+        debug.push(`   ❌ NO tiene disponibilidad`);
+        debug.push(`   - Resultado: ${dayResult ? 'objeto sin hasAvailability' : 'null'}`);
+      }
+      
+      // Generar slots directamente para comparar
+      debug.push(`\n🔧 === GENERANDO SLOTS DIRECTAMENTE ===`);
+      const directSlots = generateHourlySlots(targetMoment, correctedHours);
+      debug.push(`📊 Slots generación directa:`);
+      debug.push(`   - Slots generados: ${directSlots.length}`);
+      debug.push(`   - Horarios: [${directSlots.join(', ')}]`);
+      
+      const slotsMatch = JSON.stringify(dayResult?.slots || []) === JSON.stringify(directSlots);
+      debug.push(`   - ¿Coinciden con checkDayAvailability? ${slotsMatch ? 'SÍ' : 'NO'}`);
+      
+      return res.json({
+        debug: debug.join('\n'),
+        fecha: fecha,
+        dayName: targetMoment.format('dddd'),
+        dayResult: dayResult,
+        directSlots: directSlots,
+        hasAvailabilityInResult: dayResult && dayResult.hasAvailability,
+        meetsMinimumSlots: dayResult ? dayResult.stats?.availableSlots >= 2 : false,
+        slotsMatch: slotsMatch,
+        shouldAppearInAlternatives: dayResult && dayResult.hasAvailability && dayResult.stats?.availableSlots >= 2
+      });
+      
+    } catch (error) {
+      debug.push(`💥 ERROR en checkDayAvailability: ${error.message}`);
+      return res.json({ debug: debug.join('\n'), error: error.message });
+    }
+    
+  } catch (error) {
+    console.error(`❌ Error en debug día ${req.params.fecha}:`, error.message);
+    return res.json({
+      error: error.message,
+      fecha: req.params.fecha
+    });
+  }
+});
+
+/**
  * ENDPOINT: Debug mejorado de slots
  */
 app.get('/api/debug-slots/:fecha', async (req, res) => {
@@ -2065,6 +2217,157 @@ app.get('/api/debug-slots/:fecha', async (req, res) => {
     return res.json({
       error: error.message,
       fecha: req.params.fecha
+    });
+  }
+});
+
+/**
+ * ENDPOINT: Debug búsqueda días alternativos paso a paso
+ */
+app.get('/api/debug-busqueda-alternativos/:fechaObjetivo', async (req, res) => {
+  try {
+    const fechaObjetivo = req.params.fechaObjetivo; // FECHA SIN DISPONIBILIDAD
+    const calendarNumber = '1';
+    const serviceNumber = '1';
+    
+    console.log(`🔍 === DEBUG BÚSQUEDA DÍAS ALTERNATIVOS ===`);
+    console.log(`📅 Fecha objetivo (sin disponibilidad): ${fechaObjetivo}`);
+    
+    const targetMoment = moment.tz(fechaObjetivo, 'YYYY-MM-DD', config.timezone.default);
+    
+    if (!targetMoment.isValid()) {
+      return res.json({ error: 'Fecha inválida. Usar formato YYYY-MM-DD' });
+    }
+    
+    let debug = [];
+    debug.push(`🔍 DEBUG BÚSQUEDA DÍAS ALTERNATIVOS`);
+    debug.push(`📅 Fecha objetivo: ${fechaObjetivo} (${targetMoment.format('dddd')})`);
+    debug.push(`🎯 Objetivo: Encontrar 2+ días con >= 2 slots cada uno`);
+    debug.push(`================================\n`);
+    
+    // Obtener datos
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+      debug.push(`✅ Google Sheets conectado`);
+    } catch (error) {
+      sheetData = developmentMockData;
+      debug.push(`⚠️ Usando Mock data`);
+    }
+    
+    const today = moment().tz(config.timezone.default).startOf('day');
+    const serviceDuration = findData(serviceNumber, sheetData.services, 0, 1);
+    const calendarId = findData(calendarNumber, sheetData.calendars, 0, 1);
+    
+    debug.push(`📊 Configuración:`);
+    debug.push(`   - Hoy: ${today.format('YYYY-MM-DD')}`);
+    debug.push(`   - Servicio duración: ${serviceDuration} min`);
+    debug.push(`   - Calendar ID: ${calendarId?.substring(0, 30)}...`);
+    debug.push(``);
+    
+    const alternativeDays = [];
+    
+    // SIMULAR LÓGICA DE findAlternativeDaysWithAvailability
+    debug.push(`🔍 === BUSCANDO DÍAS POSTERIORES (1-14 días) ===`);
+    
+    for (let dayOffset = 1; dayOffset <= 14; dayOffset++) {
+      const nextDay = targetMoment.clone().add(dayOffset, 'days');
+      debug.push(`\n📅 Evaluando día +${dayOffset}: ${nextDay.format('YYYY-MM-DD')} (${nextDay.format('dddd')})`);
+      
+      try {
+        const nextResult = await checkDayAvailability(nextDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+        
+        if (nextResult && nextResult.hasAvailability) {
+          debug.push(`   ✅ TIENE disponibilidad:`);
+          debug.push(`      - Slots: ${nextResult.stats.availableSlots}`);
+          debug.push(`      - Horarios: [${nextResult.slots?.join(', ')}]`);
+          debug.push(`      - Fuente: ${nextResult.dataSource}`);
+          
+          if (nextResult.stats.availableSlots >= 2) {
+            alternativeDays.push({
+              ...nextResult,
+              distance: dayOffset,
+              direction: 'posterior',
+              priority: dayOffset
+            });
+            debug.push(`      🎯 INCLUIDO en alternativas (>= 2 slots)`);
+          } else {
+            debug.push(`      ❌ EXCLUIDO (< 2 slots requeridos)`);
+          }
+          
+        } else {
+          debug.push(`   ❌ Sin disponibilidad`);
+        }
+        
+        // Parar si ya encontramos 2 días
+        if (alternativeDays.length >= 2) {
+          debug.push(`\n🛑 DETENIENDO BÚSQUEDA: Ya encontramos ${alternativeDays.length} días válidos`);
+          break;
+        }
+        
+      } catch (error) {
+        debug.push(`   💥 ERROR: ${error.message}`);
+      }
+    }
+    
+    debug.push(`\n📊 === RESULTADO BÚSQUEDA POSTERIOR ===`);
+    debug.push(`Días encontrados: ${alternativeDays.length}`);
+    
+    // Si necesitamos más, buscar hacia atrás
+    if (alternativeDays.length < 2) {
+      debug.push(`\n🔍 === BUSCANDO DÍAS ANTERIORES (1-7 días) ===`);
+      
+      for (let dayOffset = 1; dayOffset <= 7; dayOffset++) {
+        const previousDay = targetMoment.clone().subtract(dayOffset, 'days');
+        debug.push(`\n📅 Evaluando día -${dayOffset}: ${previousDay.format('YYYY-MM-DD')} (${previousDay.format('dddd')})`);
+        
+        if (previousDay.isSameOrAfter(today, 'day')) {
+          try {
+            const prevResult = await checkDayAvailability(previousDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+            
+            if (prevResult && prevResult.hasAvailability && prevResult.stats.availableSlots >= 2) {
+              alternativeDays.push({
+                ...prevResult,
+                distance: dayOffset,
+                direction: 'anterior',
+                priority: dayOffset + 100
+              });
+              debug.push(`   ✅ INCLUIDO: ${prevResult.stats.availableSlots} slots`);
+            } else {
+              debug.push(`   ❌ No cumple filtros`);
+            }
+            
+          } catch (error) {
+            debug.push(`   💥 ERROR: ${error.message}`);
+          }
+        } else {
+          debug.push(`   ⏰ Muy en el pasado (antes de hoy)`);
+        }
+        
+        if (alternativeDays.length >= 2) break;
+      }
+    }
+    
+    debug.push(`\n🎯 === RESULTADO FINAL ===`);
+    debug.push(`Total días alternativos: ${alternativeDays.length}`);
+    
+    alternativeDays.forEach((day, index) => {
+      debug.push(`${index + 1}. ${day.dateStr} (${day.dayName}): ${day.stats.availableSlots} slots`);
+    });
+    
+    return res.json({
+      debug: debug.join('\n'),
+      fechaObjetivo: fechaObjetivo,
+      diasEncontrados: alternativeDays.length,
+      alternativeDays: alternativeDays,
+      success: alternativeDays.length > 0
+    });
+    
+  } catch (error) {
+    console.error(`❌ Error en debug búsqueda alternativos:`, error.message);
+    return res.json({
+      error: error.message,
+      fechaObjetivo: req.params.fechaObjetivo
     });
   }
 });
@@ -3035,6 +3338,8 @@ app.listen(PORT, () => {
       console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
   console.log(`   GET  ${serverUrl}/api/test-alternativos/:fecha`);
   console.log(`   GET  ${serverUrl}/api/debug-martes-30`);
+  console.log(`   GET  ${serverUrl}/api/debug-dia/:fecha`);
+  console.log(`   GET  ${serverUrl}/api/debug-busqueda-alternativos/:fecha`);
   console.log(`   GET  ${serverUrl}/api/debug-slots/:fecha`);
     console.log(`   GET  ${serverUrl}/api/debug-horarios/:fecha`);
   console.log(`\n🔧 Configuración:`);
