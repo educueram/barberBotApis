@@ -407,10 +407,12 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   // VALIDACIÓN: SÁBADO - Horario especial (10 AM - 12 PM)
   if (dayOfWeek === 6) { // Sábado
     console.log(`📅 Mock - SÁBADO - Horario especial: 10:00 AM - 12:00 PM`);
-    const saturdaySlots = mockGenerateSlotsForDay(dateMoment, {
+    const saturdaySlots = generateHourlySlots(dateMoment, {
       start: config.workingHours.saturday.startHour,
       end: config.workingHours.saturday.endHour,
-      hasLunch: false
+      hasLunch: false,
+      lunchStart: null,
+      lunchEnd: null
     });
     
     if (saturdaySlots.length === 0) {
@@ -448,7 +450,7 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   console.log(`   - Fin: ${workingHours.end}:00`);
   console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
   
-  const slots = mockGenerateSlotsForDay(dateMoment, workingHours);
+  const slots = generateHourlySlots(dateMoment, workingHours);
   
   return {
     slots: slots,
@@ -457,52 +459,60 @@ function mockFindAvailableSlots(calendarId, date, durationMinutes, hours) {
   };
 }
 
-// Función auxiliar para generar slots mock
-function mockGenerateSlotsForDay(dateMoment, workingHours) {
+// Función mejorada para generar slots de tiempo de manera más robusta
+function generateHourlySlots(dateMoment, workingHours) {
   const availableSlots = [];
   const now = moment().tz(config.timezone.default);
   const minimumBookingTime = now.clone().add(1, 'hours');
   const isToday = dateMoment.isSame(now, 'day');
   
-  console.log(`📅 Mock - Generando slots para ${dateMoment.format('YYYY-MM-DD')}`);
-  console.log(`   - Es hoy: ${isToday}`);
-  
-  // 🔍 LOGGING ESPECÍFICO: Mostrar si estamos en modo mock
-  console.log(`🚨 USANDO FUNCIÓN MOCK - NO Google Calendar real`);
-  console.log(`   - Fecha objetivo: ${dateMoment.format('YYYY-MM-DD')}`);
-  console.log(`   - Horario de trabajo: ${workingHours.start}:00 - ${workingHours.end}:00`);
-  console.log(`   - Incluye comida: ${workingHours.hasLunch ? 'Sí' : 'No'}`);
-  if (workingHours.hasLunch) {
-    console.log(`   - Comida: ${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00`);
+  console.log(`📅 === GENERANDO SLOTS ROBUSTOS ===`);
+  console.log(`📅 Fecha: ${dateMoment.format('YYYY-MM-DD dddd')}`);
+  console.log(`⏰ Horario laboral: ${workingHours.start}:00 - ${workingHours.end}:00`);
+  console.log(`🍽️ Horario comida: ${workingHours.hasLunch ? `${workingHours.lunchStart}:00 - ${workingHours.lunchEnd}:00` : 'No aplica'}`);
+  console.log(`🕐 Es hoy: ${isToday}`);
+  if (isToday) {
+    console.log(`⏰ Hora actual: ${now.format('HH:mm')}, mínimo booking: ${minimumBookingTime.format('HH:mm')}`);
   }
   
+  // Generar todos los slots posibles de hora en hora
   for (let hour = workingHours.start; hour < workingHours.end; hour++) {
-    console.log(`   🔍 Mock - Evaluando hora: ${hour}:00`);
+    console.log(`\n🔍 === EVALUANDO SLOT ${hour}:00 ===`);
     
-    // Saltar horario de comida (si aplica)
+    // 1. Verificar si es horario de comida
     if (workingHours.hasLunch && hour >= workingHours.lunchStart && hour < workingHours.lunchEnd) {
-      console.log(`   ⏰ Mock - Saltando horario de comida: ${hour}:00`);
+      console.log(`❌ EXCLUIDO: Horario de comida (${workingHours.lunchStart}:00-${workingHours.lunchEnd}:00)`);
       continue;
     }
     
-    // Crear momento para este slot
+    // 2. Crear momento para este slot
     const slotTime = dateMoment.clone().hour(hour).minute(0).second(0);
     
-    // Verificar si no es muy pronto para agendar (solo para hoy)
+    // 3. Verificar anticipación mínima (solo para hoy)
     if (isToday && slotTime.isBefore(minimumBookingTime)) {
-      console.log(`   ❌ Mock - Slot muy pronto: ${hour.toString().padStart(2, '0')}:00 (actual: ${now.format('HH:mm')}, mínimo: ${minimumBookingTime.format('HH:mm')})`);
+      console.log(`❌ EXCLUIDO: Muy pronto para agendar (requiere 1h anticipación)`);
+      console.log(`   Slot: ${slotTime.format('HH:mm')}, Mínimo: ${minimumBookingTime.format('HH:mm')}`);
       continue;
     }
     
+    // 4. Si llegamos aquí, el slot es válido
     const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
     availableSlots.push(timeSlot);
-    console.log(`   ✅ Mock - Slot agregado: ${timeSlot}`);
+    console.log(`✅ INCLUIDO: ${timeSlot}`);
   }
   
-  console.log(`   - Mock slots generados: ${availableSlots.length} (cada hora)`);
-  console.log(`   - Slots disponibles: ${availableSlots.join(', ')}`);
+  console.log(`\n📊 === RESUMEN SLOTS ===`);
+  console.log(`Total slots evaluados: ${workingHours.end - workingHours.start}`);
+  console.log(`Slots válidos generados: ${availableSlots.length}`);
+  console.log(`Slots: [${availableSlots.join(', ')}]`);
   
   return availableSlots;
+}
+
+// Función auxiliar para generar slots mock (backward compatibility)
+function mockGenerateSlotsForDay(dateMoment, workingHours) {
+  console.log(`🚨 USANDO FUNCIÓN MOCK - NO Google Calendar real`);
+  return generateHourlySlots(dateMoment, workingHours);
 }
 
 // =================================================================
@@ -1824,6 +1834,96 @@ app.post('/api/debug-sheets', async (req, res) => {
 });
 
 /**
+ * ENDPOINT: Debug mejorado de slots
+ */
+app.get('/api/debug-slots/:fecha', async (req, res) => {
+  try {
+    const fecha = req.params.fecha; // formato: YYYY-MM-DD
+    const calendarNumber = '1';
+    const serviceNumber = '1';
+    
+    console.log(`🔧 === DEBUG SLOTS MEJORADO: ${fecha} ===`);
+    
+    // Parsear fecha
+    const targetMoment = moment.tz(fecha, 'YYYY-MM-DD', config.timezone.default);
+    
+    if (!targetMoment.isValid()) {
+      return res.json({ error: 'Fecha inválida. Usar formato YYYY-MM-DD' });
+    }
+    
+    let resultado = `🔧 DEBUG SLOTS MEJORADO: ${fecha}\n\n`;
+    
+    // Obtener datos
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+      resultado += `✅ Google Sheets conectado\n`;
+    } catch (error) {
+      sheetData = developmentMockData;
+      resultado += `⚠️ Usando datos simulados\n`;
+    }
+    
+    // Obtener configuración
+    const jsDay = targetMoment.toDate().getDay();
+    const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
+    const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
+    
+    if (!workingHours) {
+      return res.json({ 
+        debug: resultado + '❌ No es día laboral',
+        fecha: fecha 
+      });
+    }
+    
+    // Aplicar corrección de horario + horario comida
+    const dayOfWeek = targetMoment.toDate().getDay();
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+    
+    const correctedHours = {
+      start: Math.max(workingHours.start, 10),
+      end: workingHours.end,
+      dayName: workingHours.dayName,
+      lunchStart: isSaturday ? null : (workingHours.lunchStart || 14),
+      lunchEnd: isSaturday ? null : (workingHours.lunchEnd || 15),
+      hasLunch: !isSaturday && !isSunday
+    };
+    
+    resultado += `📅 Día: ${targetMoment.format('dddd')} (${dayOfWeek})\n`;
+    resultado += `⏰ Horario: ${correctedHours.start}:00 - ${correctedHours.end}:00\n`;
+    resultado += `🍽️ Comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00-${correctedHours.lunchEnd}:00` : 'No aplica'}\n\n`;
+    
+    // Generar slots con función mejorada
+    console.log(`🔧 Generando slots con función mejorada...`);
+    const slots = generateHourlySlots(targetMoment, correctedHours);
+    
+    resultado += `📊 RESULTADO:\n`;
+    resultado += `   Slots totales posibles: ${correctedHours.end - correctedHours.start}\n`;
+    resultado += `   Slots generados: ${slots.length}\n`;
+    resultado += `   Horarios: [${slots.join(', ')}]\n\n`;
+    
+    resultado += `✅ ¿Cumple filtro alternativos? ${slots.length >= 2 ? 'SÍ' : 'NO'} (mínimo 2)\n`;
+    
+    return res.json({
+      debug: resultado,
+      fecha: fecha,
+      dayName: targetMoment.format('dddd'),
+      slotsGenerated: slots.length,
+      slots: slots,
+      meetsMinimum: slots.length >= 2,
+      workingHours: correctedHours
+    });
+    
+  } catch (error) {
+    console.error(`❌ Error en debug slots ${req.params.fecha}:`, error.message);
+    return res.json({
+      error: error.message,
+      fecha: req.params.fecha
+    });
+  }
+});
+
+/**
  * ENDPOINT: Test de días alternativos
  */
 app.get('/api/test-alternativos/:fecha', async (req, res) => {
@@ -2761,6 +2861,7 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/test-email`);
       console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
   console.log(`   GET  ${serverUrl}/api/test-alternativos/:fecha`);
+  console.log(`   GET  ${serverUrl}/api/debug-slots/:fecha`);
     console.log(`   GET  ${serverUrl}/api/debug-horarios/:fecha`);
   console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
