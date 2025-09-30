@@ -2638,6 +2638,69 @@ const swaggerDocument = {
           }
         }
       }
+    },
+    '/api/test-alternativos/{fecha}': {
+      get: {
+        summary: 'Probar búsqueda de días alternativos',
+        description: 'Endpoint de prueba para verificar el comportamiento de la búsqueda de días alternativos cuando no hay disponibilidad para la fecha solicitada',
+        parameters: [
+          {
+            name: 'fecha',
+            in: 'path',
+            required: true,
+            description: 'Fecha en formato YYYY-MM-DD para probar días alternativos',
+            schema: { type: 'string', example: '2025-09-26' }
+          },
+          {
+            name: 'calendar',
+            in: 'query',
+            required: false,
+            description: 'Número identificador del calendario (por defecto: 1)',
+            schema: { type: 'integer', example: 1, default: 1 }
+          },
+          {
+            name: 'service',
+            in: 'query',
+            required: false,
+            description: 'Número identificador del servicio (por defecto: 1)',
+            schema: { type: 'integer', example: 1, default: 1 }
+          }
+        ],
+        responses: {
+          '200': {
+            description: 'Respuesta exitosa con días alternativos encontrados',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    test: { type: 'string', example: '✅ DÍAS ALTERNATIVOS ENCONTRADOS' },
+                    fechaObjetivo: { type: 'string', example: '2025-09-26' },
+                    diasEncontrados: { type: 'integer', example: 2 },
+                    respuesta: { type: 'string', example: 'No tengo disponibilidad para *Jueves 26 De Septiembre De 2025* (2025-09-26), pero sí tengo para estos días:\n\n🟢 *VIERNES* (2025-09-27)\n📅 1 día después • 5 horarios disponibles\n\nⒶ 10:00 AM\nⒷ 11:00 AM\nⒸ 12:00 PM\nⒹ 4:00 PM\nⒺ 5:00 PM' },
+                    debug: { type: 'object' },
+                    dateMapping: { type: 'object' }
+                  }
+                }
+              }
+            }
+          },
+          '400': {
+            description: 'Fecha inválida',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    error: { type: 'string', example: 'Fecha inválida. Usar formato YYYY-MM-DD' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        tags: ['Debug/Testing']
+      }
     }
   }
 };
@@ -2683,6 +2746,7 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/debug-sheets`);
   console.log(`   POST ${serverUrl}/api/test-email`);
       console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
+  console.log(`   GET  ${serverUrl}/api/test-alternativos/:fecha`);
     console.log(`   GET  ${serverUrl}/api/debug-horarios/:fecha`);
   console.log(`\n🔧 Configuración:`);
   console.log(`   - Timezone: ${config.timezone.default}`);
