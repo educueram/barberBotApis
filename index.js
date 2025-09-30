@@ -228,29 +228,40 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
     const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
     
     let availableSlots = [];
+    let dataSource = 'unknown';
+    
     try {
+      console.log(`   🔗 Intentando Google Calendar API para ${dateStr}...`);
       // 🆕 PARA DÍAS ALTERNATIVOS: Usar lógica simplificada sin mensajes especiales
       const slotResult = await findAvailableSlots(calendarId, dayMoment.toDate(), parseInt(serviceDuration), correctedHours);
       
       if (typeof slotResult === 'object' && slotResult.slots !== undefined) {
         availableSlots = slotResult.slots;
+        dataSource = 'google-calendar-api';
         // 🚫 IGNORAR mensajes especiales en búsqueda alternativa
       } else {
         availableSlots = slotResult;
+        dataSource = 'google-calendar-api';
       }
+      
+      console.log(`   ✅ Google Calendar API exitosa - ${availableSlots.length} slots`);
+      
     } catch (error) {
-      console.log(`   ⚠️ Error Google Calendar, usando mock para verificación`);
+      console.log(`   ⚠️ Error Google Calendar (${error.message}), usando mock...`);
       // Usar mock simplificado solo para verificar disponibilidad
       availableSlots = mockGenerateSlotsForDay(dayMoment, correctedHours);
+      dataSource = 'mock-fallback';
+      console.log(`   ⚠️ USANDO DATOS SIMULADOS - ${availableSlots.length} slots`);
     }
 
-    console.log(`   📊 Slots encontrados: ${availableSlots.length}`);
+    console.log(`   📊 Slots encontrados: ${availableSlots.length} (fuente: ${dataSource})`);
+    console.log(`   📝 Slots: [${availableSlots.join(', ')}]`);
 
     if (availableSlots.length > 0) {
       const occupiedSlots = totalSlots - availableSlots.length;
       const occupationPercentage = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
       
-      console.log(`   ✅ Día viable: ${availableSlots.length} slots disponibles`);
+      console.log(`   ✅ Día viable: ${availableSlots.length} slots disponibles (fuente: ${dataSource})`);
       
       return {
         date: dayMoment.toDate(),
@@ -258,6 +269,7 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
         slots: availableSlots,
         hasAvailability: true,
         dayName: moment(dayMoment).format('dddd'),
+        dataSource: dataSource, // 🆕 Incluir fuente de datos para debugging
         stats: {
           totalSlots: totalSlots,
           availableSlots: availableSlots.length,
@@ -768,7 +780,14 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         }
         
         alternativeResponse += `${occupationEmoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
-        alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles\n\n`;
+        alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles`;
+        
+        // 🔧 DEBUG: Mostrar fuente de datos en modo desarrollo
+        if (process.env.NODE_ENV === 'development' && dayData.dataSource) {
+          alternativeResponse += ` [${dayData.dataSource}]`;
+        }
+        
+        alternativeResponse += `\n\n`;
         
         const formattedSlots = dayData.slots.map((slot) => {
           const letterEmoji = getLetterEmoji(letterIndex);
@@ -1833,7 +1852,14 @@ app.get('/api/test-alternativos/:fecha', async (req, res) => {
       }
       
       alternativeResponse += `${occupationEmoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n`;
-      alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles\n\n`;
+      alternativeResponse += `${distanceText} • ${dayData.stats.availableSlots} horarios disponibles`;
+      
+      // 🔧 DEBUG: Mostrar fuente de datos en modo desarrollo
+      if (process.env.NODE_ENV === 'development' && dayData.dataSource) {
+        alternativeResponse += ` [${dayData.dataSource}]`;
+      }
+      
+      alternativeResponse += `\n\n`;
       
       const formattedSlots = dayData.slots.map((slot) => {
         const letterEmoji = getLetterEmoji(letterIndex);
