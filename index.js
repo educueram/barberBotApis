@@ -248,7 +248,17 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
     console.log(`   ⏰ Horario: ${correctedHours.start}:00 - ${correctedHours.end}:00`);
     console.log(`   🍽️ Horario comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00 - ${correctedHours.lunchEnd}:00` : 'No aplica'}`);
 
-    const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
+    // 🔧 CALCULAR TOTAL SLOTS CORRECTAMENTE según horario y comida
+    let totalPossibleSlots = 0;
+    for (let hour = correctedHours.start; hour < correctedHours.end; hour++) {
+      // Excluir horario de comida del conteo
+      if (correctedHours.hasLunch && hour >= correctedHours.lunchStart && hour < correctedHours.lunchEnd) {
+        continue;
+      }
+      totalPossibleSlots++;
+    }
+    
+    console.log(`   📊 Total slots posibles: ${totalPossibleSlots} (${correctedHours.start}:00-${correctedHours.end}:00, excluyendo comida)`);
     
     let availableSlots = [];
     let dataSource = 'unknown';
@@ -281,8 +291,8 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
     console.log(`   📝 Slots: [${availableSlots.join(', ')}]`);
 
     if (availableSlots.length > 0) {
-      const occupiedSlots = totalSlots - availableSlots.length;
-      const occupationPercentage = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
+      const occupiedSlots = totalPossibleSlots - availableSlots.length;
+      const occupationPercentage = totalPossibleSlots > 0 ? Math.round((occupiedSlots / totalPossibleSlots) * 100) : 0;
       
       console.log(`   ✅ Día viable: ${availableSlots.length} slots disponibles (fuente: ${dataSource})`);
       
@@ -294,7 +304,7 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
         dayName: moment(dayMoment).format('dddd'),
         dataSource: dataSource, // 🆕 Incluir fuente de datos para debugging
         stats: {
-          totalSlots: totalSlots,
+          totalSlots: totalPossibleSlots,
           availableSlots: availableSlots.length,
           occupiedSlots: occupiedSlots,
           occupationPercentage: occupationPercentage
@@ -710,7 +720,17 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
           console.log(`   - Horario corregido: ${correctedHours.start}:00 - ${correctedHours.end}:00`);
           console.log(`   - Horario comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00 - ${correctedHours.lunchEnd}:00` : 'No aplica'}`);
           
-          const totalSlots = Math.floor((correctedHours.end - correctedHours.start) * 60 / parseInt(serviceDuration));
+          // 🔧 CALCULAR TOTAL SLOTS CORRECTAMENTE según horario y comida
+          let totalPossibleSlots = 0;
+          for (let hour = correctedHours.start; hour < correctedHours.end; hour++) {
+            // Excluir horario de comida del conteo
+            if (correctedHours.hasLunch && hour >= correctedHours.lunchStart && hour < correctedHours.lunchEnd) {
+              continue;
+            }
+            totalPossibleSlots++;
+          }
+          
+          console.log(`   📊 Total slots posibles: ${totalPossibleSlots} (excluyendo comida)`);
           
           let availableSlots = [];
           let specialMessage = null;
@@ -1834,6 +1854,132 @@ app.post('/api/debug-sheets', async (req, res) => {
 });
 
 /**
+ * ENDPOINT: Debug ULTRA específico para martes 30 septiembre
+ */
+app.get('/api/debug-martes-30', async (req, res) => {
+  try {
+    const fecha = '2025-09-30'; // MARTES PROBLEMÁTICO
+    const calendarNumber = '1';
+    const serviceNumber = '1';
+    
+    console.log(`🔥 === DEBUG ULTRA ESPECÍFICO: MARTES 30 SEPTIEMBRE ===`);
+    
+    let debug = [];
+    debug.push(`🔥 DEBUG MARTES 30 SEPTIEMBRE (2025-09-30)`);
+    debug.push(`================================`);
+    
+    // Parsear fecha
+    const targetMoment = moment.tz(fecha, 'YYYY-MM-DD', config.timezone.default);
+    debug.push(`📅 Fecha objetivo: ${targetMoment.format('YYYY-MM-DD dddd')}`);
+    debug.push(`🌍 Zona horaria: ${config.timezone.default}`);
+    debug.push(`⏰ Hora actual: ${moment().tz(config.timezone.default).format('YYYY-MM-DD HH:mm')}`);
+    
+    // Obtener datos
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+      debug.push(`✅ Google Sheets: CONECTADO`);
+    } catch (error) {
+      sheetData = developmentMockData;
+      debug.push(`⚠️ Google Sheets: ERROR - Usando Mock`);
+      debug.push(`   Error: ${error.message}`);
+    }
+    
+    const serviceDuration = findData(serviceNumber, sheetData.services, 0, 1);
+    const calendarId = findData(calendarNumber, sheetData.calendars, 0, 1);
+    
+    debug.push(`📊 Configuración obtenida:`);
+    debug.push(`   - Calendar ID: ${calendarId?.substring(0, 40)}...`);
+    debug.push(`   - Duración servicio: ${serviceDuration} min`);
+    
+    // Verificar día laboral
+    const jsDay = targetMoment.toDate().getDay();
+    const sheetDayNumber = (jsDay === 0) ? 7 : jsDay;
+    const workingHours = findWorkingHours(calendarNumber, sheetDayNumber, sheetData.hours);
+    
+    debug.push(`\n🕒 Verificación día laboral:`);
+    debug.push(`   - JS Day: ${jsDay} (0=Dom, 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb)`);
+    debug.push(`   - Sheet Day: ${sheetDayNumber}`);
+    debug.push(`   - Working Hours encontrado: ${workingHours ? 'SÍ' : 'NO'}`);
+    
+    if (!workingHours) {
+      debug.push(`❌ PROBLEMA: No es día laboral`);
+      return res.json({ debug: debug.join('\n') });
+    }
+    
+    debug.push(`   - Horario original: ${workingHours.start}:00 - ${workingHours.end}:00`);
+    
+    // Aplicar correcciones
+    const dayOfWeek = targetMoment.toDate().getDay();
+    const isSaturday = dayOfWeek === 6;
+    const isSunday = dayOfWeek === 0;
+    
+    const correctedHours = {
+      start: Math.max(workingHours.start, 10),
+      end: workingHours.end,
+      dayName: workingHours.dayName,
+      lunchStart: isSaturday ? null : (workingHours.lunchStart || 14),
+      lunchEnd: isSaturday ? null : (workingHours.lunchEnd || 15),
+      hasLunch: !isSaturday && !isSunday
+    };
+    
+    debug.push(`\n🔧 Horario corregido:`);
+    debug.push(`   - Inicio: ${correctedHours.start}:00`);
+    debug.push(`   - Fin: ${correctedHours.end}:00`);
+    debug.push(`   - Comida: ${correctedHours.hasLunch ? `${correctedHours.lunchStart}:00-${correctedHours.lunchEnd}:00` : 'No aplica'}`);
+    
+    // PASO CRÍTICO: Llamar a checkDayAvailability
+    debug.push(`\n🎯 === LLAMANDO A checkDayAvailability ===`);
+    
+    try {
+      const dayResult = await checkDayAvailability(targetMoment, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
+      
+      debug.push(`📊 Resultado checkDayAvailability:`);
+      if (dayResult && dayResult.hasAvailability) {
+        debug.push(`   ✅ TIENE disponibilidad`);
+        debug.push(`   - Slots disponibles: ${dayResult.stats.availableSlots}`);
+        debug.push(`   - Slots totales: ${dayResult.stats.totalSlots}`);
+        debug.push(`   - Ocupación: ${dayResult.stats.occupationPercentage}%`);
+        debug.push(`   - Fuente datos: ${dayResult.dataSource}`);
+        debug.push(`   - Horarios: [${dayResult.slots?.join(', ')}]`);
+        debug.push(`   - ¿Cumple filtro >= 2? ${dayResult.stats.availableSlots >= 2 ? 'SÍ' : 'NO'}`);
+      } else {
+        debug.push(`   ❌ NO tiene disponibilidad`);
+        debug.push(`   - Resultado: ${dayResult ? 'objeto sin hasAvailability' : 'null'}`);
+      }
+      
+      // TAMBIÉN generar slots directamente con nueva función
+      debug.push(`\n🔧 === GENERANDO SLOTS DIRECTAMENTE ===`);
+      const directSlots = generateHourlySlots(targetMoment, correctedHours);
+      debug.push(`📊 Slots generación directa:`);
+      debug.push(`   - Slots generados: ${directSlots.length}`);
+      debug.push(`   - Horarios: [${directSlots.join(', ')}]`);
+      
+      return res.json({
+        debug: debug.join('\n'),
+        fecha: fecha,
+        dayResult: dayResult,
+        directSlots: directSlots,
+        hasAvailabilityInResult: dayResult && dayResult.hasAvailability,
+        meetsMinimumSlots: dayResult ? dayResult.stats?.availableSlots >= 2 : false
+      });
+      
+    } catch (error) {
+      debug.push(`💥 ERROR en checkDayAvailability: ${error.message}`);
+      debug.push(`   Stack: ${error.stack}`);
+      return res.json({ debug: debug.join('\n'), error: error.message });
+    }
+    
+  } catch (error) {
+    console.error(`❌ Error en debug martes 30:`, error.message);
+    return res.json({
+      error: error.message,
+      debug: `Error general: ${error.message}`
+    });
+  }
+});
+
+/**
  * ENDPOINT: Debug mejorado de slots
  */
 app.get('/api/debug-slots/:fecha', async (req, res) => {
@@ -2861,6 +3007,7 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/test-email`);
       console.log(`   GET  ${serverUrl}/api/consulta-datos-paciente`);
   console.log(`   GET  ${serverUrl}/api/test-alternativos/:fecha`);
+  console.log(`   GET  ${serverUrl}/api/debug-martes-30`);
   console.log(`   GET  ${serverUrl}/api/debug-slots/:fecha`);
     console.log(`   GET  ${serverUrl}/api/debug-horarios/:fecha`);
   console.log(`\n🔧 Configuración:`);
