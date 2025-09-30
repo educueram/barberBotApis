@@ -137,6 +137,9 @@ async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber,
       const nextResult = await checkDayAvailability(nextDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
       
       if (nextResult && nextResult.hasAvailability) {
+        console.log(`   📊 Día evaluado: ${nextResult.dateStr} (${nextResult.dayName}) - ${nextResult.stats.availableSlots} slots [${nextResult.dataSource || 'unknown'}]`);
+        console.log(`      Slots: [${nextResult.slots?.join(', ') || 'ninguno'}]`);
+        
         // ✅ Solo incluir días con disponibilidad decente (más de 1 slot)
         if (nextResult.stats.availableSlots >= 2) {
           alternativeDays.push({
@@ -146,10 +149,12 @@ async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber,
             priority: dayOffset // Prioridad simple por cercanía
           });
           
-          console.log(`   ✅ Día viable encontrado: ${nextResult.dateStr} (${nextResult.dayName}) - ${nextResult.stats.availableSlots} slots`);
+          console.log(`   ✅ Día INCLUIDO: ${nextResult.dateStr} - ${nextResult.stats.availableSlots} slots (>= 2)`);
         } else {
-          console.log(`   ⚠️ Día con poca disponibilidad: ${nextResult.dateStr} - solo ${nextResult.stats.availableSlots} slot(s)`);
+          console.log(`   ❌ Día EXCLUIDO: ${nextResult.dateStr} - solo ${nextResult.stats.availableSlots} slot(s) (< 2 requeridos)`);
         }
+      } else {
+        console.log(`   ❌ Sin disponibilidad: ${nextDay.format('YYYY-MM-DD')} (${nextDay.format('dddd')})`);
       }
       
       // ✅ Parar cuando tengamos al menos 2 días con buena disponibilidad
@@ -169,15 +174,24 @@ async function findAlternativeDaysWithAvailability(targetMoment, calendarNumber,
         if (previousDay.isSameOrAfter(today, 'day')) {
           const prevResult = await checkDayAvailability(previousDay, calendarNumber, serviceNumber, sheetData, calendarId, serviceDuration);
           
-          if (prevResult && prevResult.hasAvailability && prevResult.stats.availableSlots >= 2) {
-            alternativeDays.push({
-              ...prevResult,
-              distance: dayOffset,
-              direction: 'anterior',
-              priority: dayOffset + 100 // Prioridad menor que posteriores
-            });
+          if (prevResult && prevResult.hasAvailability) {
+            console.log(`   📊 Día anterior evaluado: ${prevResult.dateStr} (${prevResult.dayName}) - ${prevResult.stats.availableSlots} slots [${prevResult.dataSource || 'unknown'}]`);
+            console.log(`      Slots: [${prevResult.slots?.join(', ') || 'ninguno'}]`);
             
-            console.log(`   ✅ Día anterior viable: ${prevResult.dateStr} (${prevResult.dayName}) - ${prevResult.stats.availableSlots} slots`);
+            if (prevResult.stats.availableSlots >= 2) {
+              alternativeDays.push({
+                ...prevResult,
+                distance: dayOffset,
+                direction: 'anterior',
+                priority: dayOffset + 100 // Prioridad menor que posteriores
+              });
+              
+              console.log(`   ✅ Día anterior INCLUIDO: ${prevResult.dateStr} - ${prevResult.stats.availableSlots} slots (>= 2)`);
+            } else {
+              console.log(`   ❌ Día anterior EXCLUIDO: ${prevResult.dateStr} - solo ${prevResult.stats.availableSlots} slot(s) (< 2 requeridos)`);
+            }
+          } else {
+            console.log(`   ❌ Sin disponibilidad anterior: ${previousDay.format('YYYY-MM-DD')} (${previousDay.format('dddd')})`);
           }
         }
         
@@ -275,7 +289,7 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
       return {
         date: dayMoment.toDate(),
         dateStr: dateStr,
-        slots: availableSlots,
+        slots: availableSlots, // 🔧 Incluir slots para debugging
         hasAvailability: true,
         dayName: moment(dayMoment).format('dddd'),
         dataSource: dataSource, // 🆕 Incluir fuente de datos para debugging
