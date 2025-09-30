@@ -772,10 +772,11 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
             // ❌ NO retornar inmediatamente - continuar con la búsqueda
           }
           
-          const occupiedSlots = totalSlots - availableSlots.length;
-          const occupationPercentage = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
+          const occupiedSlots = totalPossibleSlots - availableSlots.length;
+          const occupationPercentage = totalPossibleSlots > 0 ? Math.round((occupiedSlots / totalPossibleSlots) * 100) : 0;
           
-          console.log(`   - Total slots: ${totalSlots}, Disponibles: ${availableSlots.length}, Ocupación: ${occupationPercentage}%`);
+          console.log(`   - Total slots posibles: ${totalPossibleSlots}, Disponibles: ${availableSlots.length}, Ocupación: ${occupationPercentage}%`);
+          console.log(`   - Slots encontrados: [${availableSlots.join(', ')}]`);
           console.log(`   - Tipo de día: ${dayType}`);
           
           if (availableSlots.length > 0) {
@@ -787,33 +788,79 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
               emoji: dayInfo.emoji,
               priority: dayInfo.priority,
               stats: {
-                totalSlots: totalSlots,
+                totalSlots: totalPossibleSlots, // 🔧 ARREGLO CRÍTICO
                 availableSlots: availableSlots.length,
                 occupiedSlots: occupiedSlots,
                 occupationPercentage: occupationPercentage
               }
             });
+            
+            console.log(`   ✅ Día agregado a daysWithSlots: ${dayInfo.label} con ${availableSlots.length} slots`);
+          } else {
+            console.log(`   ❌ Día NO agregado: ${dayInfo.label} - Sin slots disponibles`);
           }
         }
       }
     }
     
+    console.log(`\n📊 === RESUMEN DÍAS PROCESADOS ===`);
+    console.log(`Días con slots encontrados: ${daysWithSlots.length}`);
+    daysWithSlots.forEach(day => {
+      console.log(`   ✅ ${day.label}: ${day.slots.length} slots [${day.slots.join(', ')}]`);
+    });
+    
     if (daysWithSlots.length === 0) {
       // 🆕 NUEVA LÓGICA: Buscar días alternativos con disponibilidad
-      console.log(`🔍 No hay disponibilidad en fechas consultadas, buscando días alternativos...`);
+      console.log(`\n🔍 === NO HAY DISPONIBILIDAD EN FECHAS ESTÁNDAR ===`);
+      console.log(`📅 Fecha objetivo consultada: ${targetDateStr} (${targetMoment.format('dddd')})`);
+      console.log(`🔍 Iniciando búsqueda de días alternativos...`);
       
-      const alternativeDays = await findAlternativeDaysWithAvailability(
+      // 🎯 MEJORA: Verificar si la fecha objetivo específica tiene disponibilidad
+      console.log(`\n🎯 === VERIFICACIÓN FECHA OBJETIVO ESPECÍFICA ===`);
+      console.log(`📅 Verificando disponibilidad para fecha específica: ${targetDateStr}`);
+      
+      const targetDayResult = await checkDayAvailability(
+        targetMoment, 
+        calendarNumber, 
+        serviceNumber, 
+        sheetData, 
+        findData(calendarNumber, sheetData.calendars, 0, 1),
+        findData(serviceNumber, sheetData.services, 0, 1)
+      );
+      
+      let alternativeDays = await findAlternativeDaysWithAvailability(
         targetMoment, 
         calendarNumber, 
         serviceNumber, 
         sheetData
       );
       
+      // 🔧 INCLUSIÓN FORZADA: Si la fecha objetivo tiene disponibilidad pero no está en alternativeDays
+      if (targetDayResult && targetDayResult.hasAvailability && targetDayResult.stats.availableSlots >= 2) {
+        const isAlreadyIncluded = alternativeDays.some(day => day.dateStr === targetDateStr);
+        if (!isAlreadyIncluded) {
+          console.log(`🚨 INCLUSIÓN FORZADA: Fecha objetivo ${targetDateStr} tiene ${targetDayResult.stats.availableSlots} slots pero no estaba en alternativeDays`);
+          alternativeDays.unshift({
+            ...targetDayResult,
+            distance: 0,
+            direction: 'objetivo',
+            priority: 0
+          });
+        }
+      }
+      
       if (alternativeDays.length === 0) {
-      return res.json(createJsonResponse({ 
+        console.log(`❌ Sin días alternativos encontrados`);
+        return res.json(createJsonResponse({ 
           respuesta: `😔 No hay horarios disponibles para ${formatDateToSpanishPremium(targetDate)} ni en los días cercanos.\n\n🔍 Te sugerimos elegir una fecha más lejana o contactarnos directamente.` 
         }));
       }
+      
+      console.log(`\n✅ === DÍAS ALTERNATIVOS ENCONTRADOS ===`);
+      console.log(`Total días alternativos: ${alternativeDays.length}`);
+      alternativeDays.forEach((day, index) => {
+        console.log(`${index + 1}. ${day.dateStr} (${day.dayName}): ${day.stats.availableSlots} slots - ${day.direction} (${day.dataSource})`);
+      });
       
       // 🆕 MENSAJE MEJORADO: Claro y específico
       const originalDayName = formatDateToSpanishPremium(targetDate);
