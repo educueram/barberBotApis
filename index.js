@@ -2961,6 +2961,33 @@ const swaggerDocument = {
         },
         tags: ['Debug/Testing']
       }
+    },
+    '/api/debug-martes-30': {
+      get: {
+        summary: 'Debug ultra específico para martes 30 septiembre',
+        description: 'Endpoint de debug enfocado específicamente en diagnosticar por qué el martes 30 de septiembre no aparece en días alternativos. Compara checkDayAvailability vs generateHourlySlots y identifica problemas en la lógica.',
+        responses: {
+          '200': {
+            description: 'Debug completo del martes 30 septiembre',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    debug: { type: 'string', example: '🔥 DEBUG MARTES 30 SEPTIEMBRE (2025-09-30)\n================================\n📅 Fecha objetivo: 2025-09-30 martes\n🌍 Zona horaria: America/Mexico_City\n...' },
+                    fecha: { type: 'string', example: '2025-09-30' },
+                    dayResult: { type: 'object', description: 'Resultado de checkDayAvailability' },
+                    directSlots: { type: 'array', items: { type: 'string' }, example: ['10:00', '11:00', '16:00'] },
+                    hasAvailabilityInResult: { type: 'boolean', example: true },
+                    meetsMinimumSlots: { type: 'boolean', example: true }
+                  }
+                }
+              }
+            }
+          }
+        },
+        tags: ['Debug/Testing']
+      }
     }
   }
 };
