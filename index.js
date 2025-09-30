@@ -551,13 +551,14 @@ app.get('/', (req, res) => {
 app.get('/api/consulta-disponibilidad', async (req, res) => {
   try {
     console.log('🔍 === CONSULTA DISPONIBILIDAD ===');
-    const { calendar: calendarNumber, service: serviceNumber, date: targetDateStr } = req.query;
+    const { service: serviceNumber, date: targetDateStr } = req.query;
+    const calendarNumber = '1'; // Hardcodeado: siempre usar calendario 1
 
-    console.log('Parámetros recibidos:', { calendarNumber, serviceNumber, targetDateStr });
+    console.log('Parámetros recibidos:', { calendarNumber: calendarNumber + ' (hardcodeado)', serviceNumber, targetDateStr });
 
-    if (!calendarNumber || !serviceNumber || !targetDateStr) {
+    if (!serviceNumber || !targetDateStr) {
       return res.json(createJsonResponse({ 
-        respuesta: '⚠️ Error: Faltan parámetros. Se requiere "calendar", "service" y "date".' 
+        respuesta: '⚠️ Error: Faltan parámetros. Se requiere "service" y "date".' 
       }));
     }
     
