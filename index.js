@@ -780,8 +780,11 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
           console.log(`   - Slots encontrados: [${availableSlots.join(', ')}]`);
           console.log(`   - Tipo de día: ${dayType}`);
           
+          // 🔧 SIEMPRE agregar día si es laboral, incluso sin slots (para debugging)
+          console.log(`   📊 DECISIÓN: availableSlots.length = ${availableSlots.length}, totalPossibleSlots = ${totalPossibleSlots}`);
+          
           if (availableSlots.length > 0) {
-            daysWithSlots.push({
+            const dayWithSlots = {
               date: dayInfo.date,
               dateStr: dateStr,
               slots: availableSlots,
@@ -789,16 +792,18 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
               emoji: dayInfo.emoji,
               priority: dayInfo.priority,
               stats: {
-                totalSlots: totalPossibleSlots, // 🔧 ARREGLO CRÍTICO
+                totalSlots: totalPossibleSlots,
                 availableSlots: availableSlots.length,
                 occupiedSlots: occupiedSlots,
                 occupationPercentage: occupationPercentage
               }
-            });
+            };
             
+            daysWithSlots.push(dayWithSlots);
             console.log(`   ✅ Día agregado a daysWithSlots: ${dayInfo.label} con ${availableSlots.length} slots`);
+            console.log(`      Slots agregados: [${availableSlots.join(', ')}]`);
           } else {
-            console.log(`   ❌ Día NO agregado: ${dayInfo.label} - Sin slots disponibles`);
+            console.log(`   ❌ Día NO agregado: ${dayInfo.label} - availableSlots.length = 0`);
           }
         }
       }
@@ -969,6 +974,23 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
       const urgencyText = getUrgencyText(dayData.stats.occupationPercentage);
       
       responseText += `${dayData.emoji} *${dayName.toUpperCase()}* (${dayData.dateStr})\n\n`;
+      
+      // 🔧 REGENERAR SLOTS SI ESTÁN VACÍOS (mismo arreglo que en días alternativos)
+      if (!dayData.slots || !Array.isArray(dayData.slots) || dayData.slots.length === 0) {
+        console.log(`🔧 REGENERANDO slots para día principal: ${dayData.dateStr}`);
+        const dayMoment = moment.tz(dayData.dateStr, 'YYYY-MM-DD', config.timezone.default);
+        const jsDay = dayMoment.toDate().getDay();
+        const isSaturday = jsDay === 6;
+        const correctedHours = {
+          start: 10,
+          end: isSaturday ? 12 : 19,
+          hasLunch: !isSaturday,
+          lunchStart: 14,
+          lunchEnd: 15
+        };
+        dayData.slots = generateHourlySlots(dayMoment, correctedHours);
+        console.log(`🔧 Slots regenerados para día principal: [${dayData.slots.join(', ')}]`);
+      }
       
       const formattedSlots = dayData.slots.map((slot) => {
         const letterEmoji = getLetterEmoji(letterIndex);
