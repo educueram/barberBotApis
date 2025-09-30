@@ -292,13 +292,32 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
     console.log(`   📊 Slots encontrados: ${availableSlots.length} (fuente: ${dataSource})`);
     console.log(`   📝 Slots: [${availableSlots.join(', ')}]`);
 
+    // 🚨 DEBUGGING ESPECÍFICO PARA MARTES
+    if (dateStr === '2025-09-30') {
+      console.log(`🚨 === DEBUGGING ESPECÍFICO MARTES 2025-09-30 ===`);
+      console.log(`   - availableSlots tipo: ${typeof availableSlots}`);
+      console.log(`   - availableSlots es array: ${Array.isArray(availableSlots)}`);
+      console.log(`   - availableSlots valor: ${JSON.stringify(availableSlots)}`);
+      console.log(`   - correctedHours: ${JSON.stringify(correctedHours)}`);
+      console.log(`   - dataSource: ${dataSource}`);
+      
+      // 🔧 FORZAR SLOTS SI ESTÁN VACÍOS PERO DEBERÍA HABER
+      if (!availableSlots || availableSlots.length === 0) {
+        console.log(`🚨 MARTES SIN SLOTS - FORZANDO GENERACIÓN DIRECTA`);
+        availableSlots = generateHourlySlots(dayMoment, correctedHours);
+        dataSource = dataSource + '-forced';
+        console.log(`   💪 Slots forzados: [${availableSlots.join(', ')}]`);
+      }
+    }
+
     if (availableSlots.length > 0) {
       const occupiedSlots = totalPossibleSlots - availableSlots.length;
       const occupationPercentage = totalPossibleSlots > 0 ? Math.round((occupiedSlots / totalPossibleSlots) * 100) : 0;
       
       console.log(`   ✅ Día viable: ${availableSlots.length} slots disponibles (fuente: ${dataSource})`);
       
-      return {
+      // 🚨 VERIFICACIÓN FINAL PARA MARTES
+      const finalResult = {
         date: dayMoment.toDate(),
         dateStr: dateStr,
         slots: availableSlots, // 🔧 Incluir slots para debugging
@@ -312,6 +331,16 @@ async function checkDayAvailability(dayMoment, calendarNumber, serviceNumber, sh
           occupationPercentage: occupationPercentage
         }
       };
+      
+      if (dateStr === '2025-09-30') {
+        console.log(`🚨 RESULTADO FINAL MARTES:`);
+        console.log(`   - hasAvailability: ${finalResult.hasAvailability}`);
+        console.log(`   - slots length: ${finalResult.slots.length}`);
+        console.log(`   - slots content: [${finalResult.slots.join(', ')}]`);
+        console.log(`   - availableSlots stat: ${finalResult.stats.availableSlots}`);
+      }
+      
+      return finalResult;
     }
     
     console.log(`   ❌ Sin disponibilidad`);
@@ -873,6 +902,17 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         const dayName = formatDateToSpanishPremium(dayData.date);
         const occupationEmoji = getOccupationEmoji(dayData.stats.occupationPercentage);
         
+        // 🚨 DEBUGGING ESPECÍFICO PARA MARTES EN ALTERNATIVAS
+        if (dayData.dateStr === '2025-09-30') {
+          console.log(`🚨 === DEBUGGING MARTES EN DÍAS ALTERNATIVOS ===`);
+          console.log(`   - dayData.slots tipo: ${typeof dayData.slots}`);
+          console.log(`   - dayData.slots es array: ${Array.isArray(dayData.slots)}`);
+          console.log(`   - dayData.slots length: ${dayData.slots ? dayData.slots.length : 'null/undefined'}`);
+          console.log(`   - dayData.slots valor: ${JSON.stringify(dayData.slots)}`);
+          console.log(`   - dayData.stats.availableSlots: ${dayData.stats.availableSlots}`);
+          console.log(`   - dayData.dataSource: ${dayData.dataSource}`);
+        }
+        
         // 🎯 Mensaje más claro de distancia
         let distanceText = '';
         if (dayData.direction === 'anterior') {
@@ -899,6 +939,13 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         
         alternativeResponse += `\n\n`;
         
+        // 🚨 VERIFICAR SLOTS ANTES DE FORMATEAR
+        if (!dayData.slots || !Array.isArray(dayData.slots) || dayData.slots.length === 0) {
+          console.log(`🚨 ERROR: ${dayData.dateStr} no tiene slots válidos - SALTANDO`);
+          alternativeResponse += `⚠️ Error: Horarios no disponibles temporalmente\n\n`;
+          continue;
+        }
+        
         const formattedSlots = dayData.slots.map((slot) => {
           const letterEmoji = getLetterEmoji(letterIndex);
           const time12h = formatTimeTo12Hour(slot);
@@ -914,6 +961,13 @@ app.get('/api/consulta-disponibilidad', async (req, res) => {
         }).join('\n');
         
         alternativeResponse += formattedSlots + '\n\n';
+        
+        // 🚨 DEBUGGING FINAL PARA MARTES
+        if (dayData.dateStr === '2025-09-30') {
+          console.log(`🚨 MARTES FORMATEADO:`);
+          console.log(`   - formattedSlots: ${formattedSlots}`);
+          console.log(`   - letterIndex después: ${letterIndex}`);
+        }
       }
       
       alternativeResponse += `💡 Escribe la letra del horario que prefieras (A, B, C...) ✈️`;
