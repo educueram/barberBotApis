@@ -15,9 +15,9 @@ const config = {
 
   // Configuración del negocio (migrada desde BUSINESS_CONFIG)
   business: {
-    sheetId: process.env.GOOGLE_SHEET_ID || '1zQpN_1MAQVx6DrYwbL8zK49Wv5xu4eDlGqTjKl9d-JU',
-    email: process.env.BUSINESS_EMAIL || 'goparirisvaleria@gmail.com',
-    name: process.env.BUSINESS_NAME || 'Clinica ValGop',
+    sheetId: process.env.GOOGLE_SHEET_ID || '1SUocu_HVGHQaXY5BjuZKJYbxYF7ieDR3TAFuS80NwAw',
+    email: process.env.BUSINESS_EMAIL || 'pruebasmiptech@gmail.com',
+    name: process.env.BUSINESS_NAME || 'Barberia Estilo Clasico',
     phone: process.env.BUSINESS_PHONE || '+52 5555555555',
     address: process.env.BUSINESS_ADDRESS || 'CDMX, México'
   },
@@ -61,8 +61,8 @@ const config = {
 
   // Configuración de WhatsApp Bot (migrada desde BBC_CONFIG)
   whatsapp: {
-    apiUrl: process.env.BBC_API_URL || 'https://app.builderbot.cloud/api/v2/016cda39-512b-4e2a-a753-ae3bda6d0bd8/messages',
-    apiKey: process.env.BBC_API_KEY || 'bb-19a33158-6305-4629-8405-1b2622e4d72e'
+    apiUrl: process.env.BBC_API_URL || 'https://app.builderbot.cloud/api/v2/f1582147-ac94-4171-b972-5a2b77870c75/messages',
+    apiKey: process.env.BBC_API_KEY || 'bb-f6b71f52-b8a3-49c8-9791-9a852490a6a1'
   },
 
   // Configuraciones de validación
@@ -70,7 +70,7 @@ const config = {
   smtp: {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT) || 587,
-    user: process.env.SMTP_USER || 'goparirisvaleria@gmail.com',
+    user: process.env.SMTP_USER || 'pruebasmiptech@gmail.com',
     pass: process.env.SMTP_PASS || '' // Debe ser App Password de Gmail
   },
 
