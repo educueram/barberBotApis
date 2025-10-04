@@ -16,6 +16,7 @@ async function findAvailableSlots(calendarId, date, durationMinutes, hours) {
     console.log(`📅 Buscando slots disponibles para ${calendarId} el ${date.toISOString().split('T')[0]}`);
     console.log(`🌍 Zona horaria configurada: ${config.timezone.default}`);
     console.log(`🔧 Modo forzado: ${config.workingHours.forceFixedSchedule}`);
+    console.log(`🆔 CALENDAR ID COMPLETO: ${calendarId}`);
     
     const calendar = await getCalendarInstance();
     
@@ -110,6 +111,11 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
     console.log(`   - Mínimo para agendar: ${minimumBookingTime.format('HH:mm')}`);
 
     // Obtener eventos existentes en el calendario
+    console.log(`\n🔍 === CONSULTANDO EVENTOS DE GOOGLE CALENDAR ===`);
+    console.log(`📅 Calendar ID: ${calendarId}`);
+    console.log(`⏰ TimeMin: ${startOfDay.toISOString()}`);
+    console.log(`⏰ TimeMax: ${endOfDay.toISOString()}`);
+    
     const response = await calendar.events.list({
       calendarId: calendarId,
       timeMin: startOfDay.toISOString(),
@@ -119,7 +125,16 @@ async function generateSlotsForDay(calendar, calendarId, dateMoment, workingHour
     });
 
     const events = response.data.items || [];
-    console.log(`   - Eventos encontrados: ${events.length}`);
+    console.log(`\n📊 RESULTADO: ${events.length} eventos encontrados`);
+    
+    if (events.length === 0) {
+      console.log(`⚠️ ¡ATENCIÓN! No se encontraron eventos en el calendario`);
+      console.log(`   Posibles causas:`);
+      console.log(`   1. El Calendar ID no es correcto`);
+      console.log(`   2. La cuenta de servicio no tiene permisos de lectura en el calendario`);
+      console.log(`   3. No hay eventos en este rango de tiempo`);
+      console.log(`   4. Los eventos son de "día completo" sin hora específica`);
+    }
 
     // 🔍 LOGGING DETALLADO: Mostrar todos los eventos encontrados
     events.forEach((event, index) => {

@@ -551,14 +551,13 @@ app.get('/', (req, res) => {
 app.get('/api/consulta-disponibilidad', async (req, res) => {
   try {
     console.log('🔍 === CONSULTA DISPONIBILIDAD ===');
-    const { service: serviceNumber, date: targetDateStr } = req.query;
-    const calendarNumber = '1'; // Hardcodeado: siempre usar calendario 1
+    const { calendar: calendarNumber, service: serviceNumber, date: targetDateStr } = req.query;
 
-    console.log('Parámetros recibidos:', { calendarNumber: calendarNumber + ' (hardcodeado)', serviceNumber, targetDateStr });
+    console.log('Parámetros recibidos:', { calendarNumber, serviceNumber, targetDateStr });
 
-    if (!serviceNumber || !targetDateStr) {
+    if (!calendarNumber || !serviceNumber || !targetDateStr) {
       return res.json(createJsonResponse({ 
-        respuesta: '⚠️ Error: Faltan parámetros. Se requiere "service" y "date".' 
+        respuesta: '⚠️ Error: Faltan parámetros. Se requiere "calendar", "service" y "date".' 
       }));
     }
     
@@ -1165,6 +1164,160 @@ app.get('/api/eventos/:fecha', async (req, res) => {
   } catch (error) {
     console.error('Error consultando eventos:', error.message);
     return res.json({ respuesta: `❌ Error: ${error.message}` });
+  }
+});
+
+/**
+ * ENDPOINT DE DEBUG: Consultar eventos de un calendario específico
+ */
+app.get('/api/debug-eventos-calendario', async (req, res) => {
+  try {
+    const { calendar, date } = req.query;
+    
+    if (!calendar || !date) {
+      return res.json({ error: 'Se requieren parámetros: calendar y date' });
+    }
+    
+    console.log(`🔍 === DEBUG EVENTOS CALENDARIO ${calendar} - ${date} ===`);
+    
+    // Obtener calendar ID desde Sheets
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+    } catch (error) {
+      return res.json({ error: `❌ Error obteniendo datos de Sheets: ${error.message}` });
+    }
+    
+    const calendarId = findData(calendar, sheetData.calendars, 0, 1);
+    console.log(`📅 Calendar ${calendar} → ID: ${calendarId}`);
+    
+    if (!calendarId) {
+      return res.json({ error: `❌ No se encontró Calendar ID para calendario ${calendar}` });
+    }
+    
+    // Consultar eventos
+    const calendarInstance = await getCalendarInstance();
+    const startOfDay = moment.tz(date, 'YYYY-MM-DD', config.timezone.default).startOf('day');
+    const endOfDay = moment.tz(date, 'YYYY-MM-DD', config.timezone.default).endOf('day');
+    
+    console.log(`⏰ Consultando de ${startOfDay.toISOString()} a ${endOfDay.toISOString()}`);
+    
+    const response = await calendarInstance.events.list({
+      calendarId: calendarId,
+      timeMin: startOfDay.toISOString(),
+      timeMax: endOfDay.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+    
+    const events = response.data.items || [];
+    
+    console.log(`📊 Eventos encontrados: ${events.length}`);
+    
+    let resultado = `🔍 DEBUG CALENDARIO ${calendar} - ${date}\n\n`;
+    resultado += `📋 Calendar ID: ${calendarId}\n`;
+    resultado += `📊 Total eventos: ${events.length}\n\n`;
+    
+    if (events.length > 0) {
+      resultado += `📅 EVENTOS ENCONTRADOS:\n\n`;
+      events.forEach((event, index) => {
+        const eventStart = moment(event.start?.dateTime || event.start?.date).tz(config.timezone.default);
+        resultado += `${index + 1}. ${eventStart.format('HH:mm')} - "${event.summary}"\n`;
+        resultado += `   Inicio: ${event.start?.dateTime || event.start?.date}\n`;
+        resultado += `   Fin: ${event.end?.dateTime || event.end?.date}\n\n`;
+      });
+    } else {
+      resultado += `❌ NO SE ENCONTRARON EVENTOS\n\n`;
+      resultado += `Posibles causas:\n`;
+      resultado += `1. El Calendar ID es incorrecto\n`;
+      resultado += `2. La cuenta de servicio no tiene permisos en este calendario\n`;
+      resultado += `3. Los eventos son de "día completo" sin hora\n`;
+      resultado += `4. Realmente no hay eventos en esta fecha\n`;
+    }
+    
+    return res.json({
+      respuesta: resultado,
+      debug: {
+        calendarNumber: calendar,
+        calendarId: calendarId,
+        date: date,
+        totalEventos: events.length,
+        eventos: events.map(e => ({
+          summary: e.summary,
+          start: e.start?.dateTime || e.start?.date,
+          end: e.end?.dateTime || e.end?.date
+        }))
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error en debug eventos:', error.message);
+    return res.json({ error: `❌ Error: ${error.message}` });
+  }
+});
+
+/**
+ * ENDPOINT DE DEBUG: Verificar configuración de calendario
+ */
+app.get('/api/debug-calendar-config', async (req, res) => {
+  try {
+    console.log('🔍 === DEBUG CALENDAR CONFIG ===');
+    
+    // Obtener datos de Google Sheets
+    let sheetData;
+    try {
+      sheetData = await getSheetData();
+    } catch (error) {
+      return res.json({ error: `❌ Error obteniendo datos de Sheets: ${error.message}` });
+    }
+    
+    // Obtener Calendar ID
+    const calendarId = findData('1', sheetData.calendars, 0, 1);
+    const especialista = findData('1', sheetData.calendars, 0, 2);
+    
+    console.log(`📅 Calendar ID encontrado: ${calendarId}`);
+    console.log(`👨‍⚕️ Especialista: ${especialista}`);
+    
+    // Mostrar toda la configuración de CALENDARIOS
+    let calendarsInfo = '📋 HOJA CALENDARIOS:\n\n';
+    sheetData.calendars.forEach((row, index) => {
+      if (index === 0) {
+        calendarsInfo += `HEADERS: ${row.join(' | ')}\n`;
+        calendarsInfo += '─'.repeat(50) + '\n';
+      } else {
+        calendarsInfo += `Fila ${index}: ${row.join(' | ')}\n`;
+      }
+    });
+    
+    // Intentar obtener lista de calendarios disponibles
+    let calendarsAvailable = 'No disponible';
+    try {
+      const calendar = await getCalendarInstance();
+      const calendarListResponse = await calendar.calendarList.list();
+      const calendars = calendarListResponse.data.items || [];
+      
+      calendarsAvailable = '\n📅 CALENDARIOS DISPONIBLES PARA LA CUENTA DE SERVICIO:\n\n';
+      calendars.forEach((cal, index) => {
+        calendarsAvailable += `${index + 1}. ${cal.summary}\n`;
+        calendarsAvailable += `   ID: ${cal.id}\n`;
+        calendarsAvailable += `   Acceso: ${cal.accessRole}\n\n`;
+      });
+    } catch (error) {
+      calendarsAvailable = `❌ Error obteniendo lista: ${error.message}`;
+    }
+    
+    return res.json({
+      respuesta: calendarsInfo + '\n\n' + calendarsAvailable,
+      config: {
+        calendarIdEnUso: calendarId,
+        especialista: especialista,
+        cuentaDeServicio: config.google.clientEmail
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error en debug:', error.message);
+    return res.json({ error: `❌ Error: ${error.message}` });
   }
 });
 
@@ -2943,6 +3096,7 @@ app.listen(PORT, () => {
   console.log(`   POST ${serverUrl}/api/cancela-cita`);
   console.log(`   GET  ${serverUrl}/api/consulta-fecha-actual`);
   console.log(`   GET  ${serverUrl}/api/eventos/:fecha`);
+  console.log(`   GET  ${serverUrl}/api/debug-calendar-config`);
   console.log(`   POST ${serverUrl}/api/debug-agenda`);
   console.log(`   POST ${serverUrl}/api/debug-sheets`);
   console.log(`   POST ${serverUrl}/api/test-email`);
