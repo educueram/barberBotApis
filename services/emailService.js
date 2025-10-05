@@ -117,8 +117,8 @@ async function sendAppointmentConfirmation(appointmentData) {
           <p><strong>👤 Cliente:</strong> ${clientName}</p>
           <p><strong>📅 Fecha:</strong> ${fechaFormateada}</p>
           <p><strong>⏰ Hora:</strong> ${horaFormateada}</p>
-          <p><strong>👨‍⚕️ Especialista:</strong> ${profesionalName}</p>
-          <p><strong>🩺 Servicio:</strong> ${serviceName}</p>
+          <p><strong>✂️ Barbero:</strong> ${profesionalName}</p>
+          <p><strong>💈 Servicio:</strong> ${serviceName}</p>
           <p><strong>🎟️ Código de Reserva:</strong> <span style="font-size: 18px; font-weight: bold; color: #d32f2f;">${codigoReserva}</span></p>
         </div>
 
@@ -271,7 +271,7 @@ async function sendNewAppointmentNotification(appointmentData) {
               <span style="margin-left: 8px; font-weight: 600;">${horaFormateada}</span>
             </div>
             <div style="margin-bottom: 8px;">
-              <span style="color: #2e7d32; font-weight: 500;">👨‍⚕️ Especialista:</span>
+              <span style="color: #2e7d32; font-weight: 500;">✂️ Barbero:</span>
               <span style="margin-left: 8px; font-weight: 600;">${profesionalName}</span>
             </div>
             <div style="margin-bottom: 8px;">

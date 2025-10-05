@@ -345,7 +345,7 @@ function findNextWorkingDay(calendarNumber, startDate, hoursData) {
 // Datos mock solo para desarrollo cuando no hay credenciales configuradas
 const developmentMockData = {
   calendars: [
-    ['Número', 'Calendar ID', 'Especialista'],
+    ['Número', 'Calendar ID', 'Barbero'],
     ['1', 'calendario1@gmail.com', 'Dr. García'],
     ['2', 'calendario2@gmail.com', 'Dra. López']
   ],
@@ -1276,7 +1276,7 @@ app.get('/api/debug-calendar-config', async (req, res) => {
     const especialista = findData('1', sheetData.calendars, 0, 2);
     
     console.log(`📅 Calendar ID encontrado: ${calendarId}`);
-    console.log(`👨‍⚕️ Especialista: ${especialista}`);
+    console.log(`✂️ Barbero: ${especialista}`);
     
     // Mostrar toda la configuración de CALENDARIOS
     let calendarsInfo = '📋 HOJA CALENDARIOS:\n\n';
@@ -1544,7 +1544,7 @@ app.post('/api/agenda-cita', async (req, res) => {
     console.log('endTime final:', endTime.format('YYYY-MM-DD HH:mm:ss z'));
     console.log('serviceDuration:', serviceDuration, 'minutos');
     
-    const eventTitle = `Cita: ${clientName} (${profesionalName || 'Especialista'})`;
+    const eventTitle = `Cita: ${clientName} (${profesionalName || 'Barbero'})`;
     const eventDescription = `Cliente: ${clientName}
 Email: ${clientEmail}
 Teléfono: ${clientPhone}
@@ -1586,7 +1586,7 @@ Agendado por: Agente de WhatsApp`;
       clientName: clientName || 'Cliente Sin Nombre',
       clientPhone: clientPhone || 'Sin Teléfono',
       clientEmail: clientEmail || 'Sin Email',
-      profesionalName: profesionalName || 'Sin Especialista',
+      profesionalName: profesionalName || 'Sin Barbero',
       date: date || 'Sin Fecha',
       time: time || 'Sin Hora',
       serviceName: serviceName || 'Sin Servicio'
@@ -1610,7 +1610,7 @@ Agendado por: Agente de WhatsApp`;
           date,
           time,
           serviceName,
-          profesionalName: profesionalName || 'Especialista',
+          profesionalName: profesionalName || 'Barbero',
           codigoReserva
         };
         
@@ -1649,7 +1649,7 @@ Agendado por: Agente de WhatsApp`;
     console.log('time12h:', time12h);
 
     const finalResponse = {
-        respuesta: `✅ ¡Cita confirmada! ✈️\n\nDetalles de tu cita:\n📅 Fecha: ${date}\n⏰ Hora: ${time12h}\n👨‍⚕️ Especialista: ${profesionalName || 'el especialista'}\n\n🎟️ TU CÓDIGO DE RESERVA ES: ${codigoReserva}\n\n¡Gracias por confiar en nosotros! 🌟`,
+        respuesta: `✅ ¡Cita confirmada! ✈️\n\nDetalles de tu cita:\n📅 Fecha: ${date}\n⏰ Hora: ${time12h}\n✂️ Barbero: ${profesionalName || 'el especialista'}\n\n🎟️ TU CÓDIGO DE RESERVA ES: ${codigoReserva}\n\n¡Gracias por confiar en nosotros! 🌟`,
       id_cita: codigoReserva
     };
 
@@ -2632,7 +2632,7 @@ const swaggerDocument = {
                       properties: {
                         respuesta: { 
                           type: 'string',
-                          example: '✅ ¡Cita confirmada! ✈️\n\nDetalles de tu cita:\n📅 Fecha: 2025-08-27\n⏰ Hora: 2:00 PM\n👨‍⚕️ Especialista: Dr. Juan\n\n🎟️ TU CÓDIGO DE RESERVA ES: ABC123\n\n¡Gracias por confiar en nosotros! 🌟'
+                          example: '✅ ¡Cita confirmada! ✈️\n\nDetalles de tu cita:\n📅 Fecha: 2025-08-27\n⏰ Hora: 2:00 PM\n✂️ Barbero: Dr. Juan\n\n🎟️ TU CÓDIGO DE RESERVA ES: ABC123\n\n¡Gracias por confiar en nosotros! 🌟'
                         },
                         id_cita: { 
                           type: 'string',

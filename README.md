@@ -137,7 +137,7 @@ Content-Type: application/json
 **Respuesta exitosa:**
 ```json
 {
-  "respuesta": "✅ ¡Cita confirmada! ✨\n\nDetalles de tu cita:\n📅 Fecha: 2025-08-27\n⏰ Hora: 2:00 PM\n👨‍⚕️ Especialista: Dr. Juan\n\n🎟️ TU CÓDIGO DE RESERVA ES: ABC123\n\n¡Gracias por confiar en nosotros! 🌟",
+  "respuesta": "✅ ¡Cita confirmada! ✨\n\nDetalles de tu cita:\n📅 Fecha: 2025-08-27\n⏰ Hora: 2:00 PM\n✂️ Barbero: Dr. Juan\n\n🎟️ TU CÓDIGO DE RESERVA ES: ABC123\n\n¡Gracias por confiar en nosotros! 🌟",
   "id_cita": "ABC123"
 }
 ```
@@ -222,7 +222,7 @@ http://localhost:3000/api-docs
 El sistema requiere un Google Sheet con las siguientes hojas:
 
 #### CALENDARIOS
-| Número | Calendar ID | Especialista |
+| Número | Calendar ID | Barbero |
 |--------|-------------|--------------|
 | 1 | calendario1@gmail.com | Dr. García |
 | 2 | calendario2@gmail.com | Dra. López |
